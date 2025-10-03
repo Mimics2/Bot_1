@@ -1,7 +1,8 @@
 # main.py
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
-# ИСПРАВЛЕННЫЙ ИМПОРТ: Теперь импортируем ВСЕ константы состояний
+# 🚨 ИСПРАВЛЕНИЕ: Добавлен импорт 'Update' из 'telegram'
+from telegram import Update 
 from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, main_keyboard, theme_keyboard, genre_keyboard
 from payment_service import activate_pro_command
@@ -16,7 +17,6 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            # Используем явно импортированные константы
             CHOOSING_ACTION: [
                 MessageHandler(filters.Text([item for sublist in main_keyboard for item in sublist if item != "❌ Отмена"]), choose_action)
             ],
@@ -43,6 +43,7 @@ def main() -> None:
     
     logger.info("🤖 Бот запущен и готов к работе...")
     
+    # Теперь Update определен благодаря новому импорту
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
