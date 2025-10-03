@@ -8,7 +8,7 @@ from config import (
     CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
-# Удален импорт main_keyboard, theme_keyboard, genre_keyboard из handlers
+# Импортируем функции из handlers.py и payment_service.py
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
 from payment_service import handle_access_code
 
@@ -53,3 +53,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
