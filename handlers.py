@@ -2,8 +2,9 @@
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
-# ✅ ИСПРАВЛЕННЫЙ ИМПОРТ: Теперь на отдельных строках
-from config import * from ai_service import MASTER_PROMPT, call_gemini_api
+# ✅ ИСПРАВЛЕНО: Два отдельных оператора импорта:
+from config import *
+from ai_service import MASTER_PROMPT, call_gemini_api
 from payment_service import check_access, handle_access_code 
 
 
@@ -142,3 +143,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     context.user_data.clear()
     return CHOOSING_ACTION
+
+
+    
