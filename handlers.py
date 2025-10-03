@@ -2,8 +2,9 @@
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
-# ✅ ИСПРАВЛЕННЫЕ ИМПОРТЫ: Теперь на отдельных строках
-from config import * from ai_service import MASTER_PROMPT, call_gemini_api
+# ✅ ИСПРАВЛЕНО: Импорты разделены на две строки
+from config import *
+from ai_service import MASTER_PROMPT, call_gemini_api
 from payment_service import check_access, handle_access_code 
 
 
