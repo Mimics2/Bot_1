@@ -1,9 +1,9 @@
 # main.py
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
-# 🚨 ИСПРАВЛЕНИЕ: Добавлен импорт 'Update' из 'telegram'
 from telegram import Update 
-from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION
+# Импортируем ВСЕ константы, включая валюту (на всякий случай)
+from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, SUBSCRIPTION_CURRENCY 
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, main_keyboard, theme_keyboard, genre_keyboard
 from payment_service import activate_pro_command
 
@@ -43,7 +43,6 @@ def main() -> None:
     
     logger.info("🤖 Бот запущен и готов к работе...")
     
-    # Теперь Update определен благодаря новому импорту
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
