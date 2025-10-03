@@ -4,7 +4,7 @@ import logging
 
 # --- ТОКЕНЫ И КЛЮЧИ ---
 TELEGRAM_BOT_TOKEN = '8428976532:AAElfrt3A7y3Q5Paq2-eVY9ACxQXKc9cSZE'
-GEMINI_API_KEY = 'AIzaSyBXaEujyx80xYCaZ6ByraBad4hqyJQr6WQ' 
+GEMINI_API_KEY = 'AIzaSyBiZegB15BVFGIKW8L6-uhWFRYxb5PooyI' 
 
 # --- НАСТРОЙКИ ДОСТУПА ПО КОДУ ---
 SECRET_ACCESS_CODE = "PROCOPY2025" # 🔥 ВАШ СЕКРЕТНЫЙ КОД
