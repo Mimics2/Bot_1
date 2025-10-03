@@ -2,10 +2,14 @@
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
 from telegram import Update 
-# Импортируем НОВОЕ состояние GETTING_ACCESS_CODE
-from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE
-# Также импортируем новую функцию handle_access_code
-from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, main_keyboard, theme_keyboard, genre_keyboard
+# Импортируем ВСЕ константы и КЛАВИАТУРЫ из config.py
+from config import (
+    TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, 
+    CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
+    main_keyboard, theme_keyboard, genre_keyboard
+)
+# Удален импорт main_keyboard, theme_keyboard, genre_keyboard из handlers
+from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
 from payment_service import handle_access_code
 
 def main() -> None:
@@ -21,7 +25,6 @@ def main() -> None:
             CHOOSING_ACTION: [
                 MessageHandler(filters.Text([item for sublist in main_keyboard for item in sublist if item != "❌ Отмена"]), choose_action)
             ],
-            # НОВОЕ СОСТОЯНИЕ: Ожидаем ввод секретного кода
             GETTING_ACCESS_CODE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
             ],
