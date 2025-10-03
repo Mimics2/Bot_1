@@ -2,7 +2,8 @@
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
 from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION
-from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel
+# Импортируем клавиатуру и все обработчики из handlers, чтобы ConversationHandler мог работать
+from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, main_keyboard, theme_keyboard, genre_keyboard
 from payment_service import activate_pro_command
 
 def main() -> None:
@@ -17,13 +18,13 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                MessageHandler(filters.Text(list(zip(*main_keyboard))[0]), choose_action)
+                MessageHandler(filters.Text([item for sublist in main_keyboard for item in sublist if item != "❌ Отмена"]), choose_action)
             ],
             CHOOSING_THEME: [
-                MessageHandler(filters.Text(list(zip(*theme_keyboard))[0] + ["Другая тема", "⬅️ Назад"]), choose_theme)
+                MessageHandler(filters.Text([item for sublist in theme_keyboard for item in sublist if item != "⬅️ Назад"]), choose_theme)
             ],
             CHOOSING_GENRE: [
-                MessageHandler(filters.Text(list(zip(*genre_keyboard))[0] + ["⬅️ Назад"]), choose_genre)
+                MessageHandler(filters.Text([item for sublist in genre_keyboard for item in sublist if item != "⬅️ Назад"]), choose_genre)
             ],
             GETTING_TOPIC: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, generate_post)
@@ -46,4 +47,6 @@ def main() -> None:
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
+    # Ошибка в Traceback указывает, что запуск происходил из 'main.py'
+    # Поэтому оставляем точку входа здесь.
     main()
