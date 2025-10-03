@@ -4,7 +4,7 @@ import logging
 
 # --- ТОКЕНЫ И КЛЮЧИ ---
 # Ваш токен Telegram от BotFather
-TELEGRAM_BOT_TOKEN = '8428976532:AAElfrt3A7y3Q5Paq2-eVY9ACxQXKc9cSZE'
+TELEGRAM_BOT_TOKEN  = '8428976532:AAElfrt3A7y3Q5Paq2-eVY9ACxQXKc9cSZE'
 # Ваш ключ Gemini API
 GEMINI_API_KEY = 'AIzaSyBXaEujyx80xYCaZ6ByraBad4hqyJQr6WQ' 
 
