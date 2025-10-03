@@ -1,8 +1,8 @@
 # main.py
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
-from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION
-# Импортируем клавиатуру и все обработчики из handlers, чтобы ConversationHandler мог работать
+# ИСПРАВЛЕННЫЙ ИМПОРТ: Теперь импортируем ВСЕ константы состояний
+from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, main_keyboard, theme_keyboard, genre_keyboard
 from payment_service import activate_pro_command
 
@@ -13,10 +13,10 @@ def main() -> None:
     
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Создаем обработчик диалога (ConversationHandler)
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
+            # Используем явно импортированные константы
             CHOOSING_ACTION: [
                 MessageHandler(filters.Text([item for sublist in main_keyboard for item in sublist if item != "❌ Отмена"]), choose_action)
             ],
@@ -39,7 +39,6 @@ def main() -> None:
 
     application.add_handler(conv_handler)
     
-    # Добавляем тестовую команду для активации PRO-доступа
     application.add_handler(CommandHandler("activate_pro", activate_pro_command))
     
     logger.info("🤖 Бот запущен и готов к работе...")
@@ -47,6 +46,4 @@ def main() -> None:
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    # Ошибка в Traceback указывает, что запуск происходил из 'main.py'
-    # Поэтому оставляем точку входа здесь.
     main()
