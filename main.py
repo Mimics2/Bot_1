@@ -2,10 +2,11 @@
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
 from telegram import Update 
-# Импортируем ВСЕ константы, включая валюту (на всякий случай)
-from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, SUBSCRIPTION_CURRENCY 
+# Импортируем НОВОЕ состояние GETTING_ACCESS_CODE
+from config import TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE
+# Также импортируем новую функцию handle_access_code
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, main_keyboard, theme_keyboard, genre_keyboard
-from payment_service import activate_pro_command
+from payment_service import handle_access_code
 
 def main() -> None:
     """Основная функция для запуска бота."""
@@ -19,6 +20,10 @@ def main() -> None:
         states={
             CHOOSING_ACTION: [
                 MessageHandler(filters.Text([item for sublist in main_keyboard for item in sublist if item != "❌ Отмена"]), choose_action)
+            ],
+            # НОВОЕ СОСТОЯНИЕ: Ожидаем ввод секретного кода
+            GETTING_ACCESS_CODE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
             ],
             CHOOSING_THEME: [
                 MessageHandler(filters.Text([item for sublist in theme_keyboard for item in sublist if item != "⬅️ Назад"]), choose_theme)
@@ -38,8 +43,6 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
-    
-    application.add_handler(CommandHandler("activate_pro", activate_pro_command))
     
     logger.info("🤖 Бот запущен и готов к работе...")
     
