@@ -2,12 +2,14 @@
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
 from telegram import Update 
-# Импортируем ВСЕ константы и КЛАВИАТУРЫ из config.py
+# ✅ ИСПРАВЛЕНО: logger убран из общего импорта и импортируется отдельно
 from config import (
-    TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, 
+    TELEGRAM_BOT_TOKEN, CHOOSING_ACTION, CHOOSING_THEME, 
     CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
+# ✅ ДОБАВЛЕНО: Явный импорт logger
+from config import logger
 # Импортируем функции из handlers.py и payment_service.py
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
 from payment_service import handle_access_code
