@@ -2,16 +2,17 @@
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
 from telegram import Update 
+# ✅ ИСПРАВЛЕНО: Явный импорт logger и всех констант
 from config import (
-    TELEGRAM_BOT_TOKEN, CHOOSING_ACTION, CHOOSING_THEME, 
+    TELEGRAM_BOT_TOKEN, logger, CHOOSING_ACTION, CHOOSING_THEME, 
     CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
-from config import logger
+# Импортируем функции из handlers.py и payment_service.py
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
 from payment_service import handle_access_code
 
-# 🔥 Явно задаем тексты кнопок, чтобы избежать ошибок кодировки
+# 🔥 Явно задаем тексты кнопок, чтобы избежать ошибок кодировки и импорта
 MAIN_ACTIONS = ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]
 FALLBACK_CANCEL = ["❌ Отмена"]
 THEME_ACTIONS = ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема", "⬅️ Назад"]
@@ -50,7 +51,6 @@ def main() -> None:
                  MessageHandler(filters.TEXT & ~filters.COMMAND, correct_post)
             ],
         },
-        # Обработчик кнопки "Отмена" всегда срабатывает
         fallbacks=[MessageHandler(filters.Text(FALLBACK_CANCEL), cancel)],
         allow_reentry=True
     )
