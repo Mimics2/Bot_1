@@ -2,26 +2,25 @@
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
 from telegram import Update 
-# ✅ Импорты исправлены
 from config import (
     TELEGRAM_BOT_TOKEN, CHOOSING_ACTION, CHOOSING_THEME, 
     CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
 from config import logger
-# Импортируем функции из handlers.py и payment_service.py
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
 from payment_service import handle_access_code
 
 # 🔥 Вспомогательные функции для создания надежных списков кнопок
+# Эти функции теперь просто возвращают заранее определенные списки, избегая list comprehensions.
 def get_main_actions():
-    return [item for sublist in main_keyboard for item in sublist if item not in ["❌ Отмена"]]
+    return ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]
 
 def get_theme_actions():
-    return [item for sublist in theme_keyboard for item in sublist if item != "⬅️ Назад"]
+    return ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема"]
 
 def get_genre_actions():
-    return [item for sublist in genre_keyboard for item in sublist if item != "⬅️ Назад"]
+    return ["Информационный (обучение)", "Продающий (AIDA)", "Развлекательный (лайфхак)", "Сторителлинг (личная история)", "Провокация (хайп)"]
 
 
 def main() -> None:
@@ -35,18 +34,18 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                # 🔥 ИСПРАВЛЕНИЕ: Используем явный список текстов кнопок для надежности
+                # ✅ ИСПРАВЛЕНО: Явный список для основных действий
                 MessageHandler(filters.Text(get_main_actions()), choose_action)
             ],
             GETTING_ACCESS_CODE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
             ],
             CHOOSING_THEME: [
-                # Обрабатываем все кнопки темы, включая "Назад"
+                # ✅ ИСПРАВЛЕНО: Обрабатываем все кнопки ТЕМЫ и кнопку НАЗАД
                 MessageHandler(filters.Text(get_theme_actions() + ["⬅️ Назад"]), choose_theme)
             ],
             CHOOSING_GENRE: [
-                # Обрабатываем все кнопки жанра, включая "Назад"
+                # ✅ ИСПРАВЛЕНО: Обрабатываем все кнопки ЖАНРА и кнопку НАЗАД
                 MessageHandler(filters.Text(get_genre_actions() + ["⬅️ Назад"]), choose_genre)
             ],
             GETTING_TOPIC: [
