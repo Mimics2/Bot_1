@@ -8,13 +8,14 @@ from config import (
     CHOOSING_GENRE, GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
-# Импортируем функции из handlers.py (handle_access_code теперь там)
-from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel, handle_access_code
+# Импортируем функции из handlers.py и payment_service.py
+from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
+from payment_service import handle_access_code # Импортируем функцию, которая обрабатывает код
 
-# 🔥 НОВЫЕ ЯВНЫЕ СПИСКИ КНОПОК
-MAIN_ACTIONS = ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]
-THEME_ACTIONS = ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема"]
-GENRE_ACTIONS = ["Информационный (обучение)", "Продающий (AIDA)", "Развлекательный (лайфхак)", "Сторителлинг (личная история)", "Провокация (хайп)"]
+# 🔥 ЯВНЫЕ СПИСКИ КНОПОК ДЛЯ СТАБИЛЬНЫХ ФИЛЬТРОВ
+MAIN_ACTIONS = ["✨ Новый пост", "⚙️ Корректировка текста"]
+THEME_ACTIONS = ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема", "⬅️ Назад"]
+GENRE_ACTIONS = ["Информационный (обучение)", "Продающий (AIDA)", "Развлекательный", "Сторителлинг", "Провокация", "⬅️ Назад"]
 
 
 def main() -> None:
@@ -28,28 +29,35 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                # 🔥 Используем явный список действий
+                # Фильтр для действий (исключаем "❌ Отмена", так как он в fallbacks)
                 MessageHandler(filters.Text(MAIN_ACTIONS), choose_action)
             ],
             GETTING_ACCESS_CODE: [
+                # Фильтр для кода доступа
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
             ],
             CHOOSING_THEME: [
-                # Фильтруем все кнопки темы И кнопку "⬅️ Назад"
-                MessageHandler(filters.Text(THEME_ACTIONS + ["⬅️ Назад"]), choose_theme)
+                # Фильтр для кнопок темы и кнопки "⬅️ Назад"
+                MessageHandler(filters.Text(THEME_ACTIONS), choose_theme)
             ],
             CHOOSING_GENRE: [
-                # Фильтруем все кнопки жанра И кнопку "⬅️ Назад"
-                MessageHandler(filters.Text(GENRE_ACTIONS + ["⬅️ Назад"]), choose_genre)
+                # Фильтр для кнопок жанра и кнопки "⬅️ Назад"
+                MessageHandler(filters.Text(GENRE_ACTIONS), choose_genre)
             ],
             GETTING_TOPIC: [
+                # Фильтр для пользовательского текста (тема/идея)
                 MessageHandler(filters.TEXT & ~filters.COMMAND, generate_post)
             ],
             GETTING_CORRECTION: [
+                 # Фильтр для пользовательского текста (коррекция)
                  MessageHandler(filters.TEXT & ~filters.COMMAND, correct_post)
             ],
         },
-        fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), cancel)],
+        # Fallbacks - обработка команды "Отмена"
+        fallbacks=[
+            MessageHandler(filters.Text(["❌ Отмена"]), cancel),
+            CommandHandler("start", start)
+        ],
         allow_reentry=True
     )
 
