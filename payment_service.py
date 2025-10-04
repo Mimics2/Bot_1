@@ -4,13 +4,13 @@ import json
 from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
-# Импортируем только то, что нужно
 from config import logger, SECRET_ACCESS_CODE, ACCESS_PRICE_DISPLAY 
 
 
 # --- КОНФИГУРАЦИЯ ХРАНИЛИЩА ---
 USERS_DATA_FILE = 'users_data.json'
-TRIAL_DURATION_DAYS = 365 
+TRIAL_DURATION_DAYS = 365 # Срок действия доступа
+
 
 # --- ФУНКЦИИ РАБОТЫ С ДАННЫМИ (JSON) ---
 
@@ -20,19 +20,17 @@ def load_users_data() -> dict:
         with open(USERS_DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        # Файл не найден или пуст - создаем пустой словарь
         return {}
 
 def save_users_data(data: dict):
     """Сохраняет данные о пользователях в JSON-файл."""
     try:
         with open(USERS_DATA_FILE, 'w', encoding='utf-8') as f:
-            # Убедитесь, что файл users_data.json создан в папке проекта
             json.dump(data, f, indent=4, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Ошибка при сохранении данных в {USERS_DATA_FILE}: {e}")
 
-# 🔥 Глобальная переменная для хранения данных
+# 🔥 Глобальная переменная для хранения данных (используется handlers.py)
 USERS_DATA = load_users_data() 
 
 def activate_pro_access(user_id: int):
@@ -60,11 +58,11 @@ async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAU
             expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d")
             if expiration_date >= datetime.now(): 
                 return True
-            # Срок истек, удаляем
+            # Срок истек
             del USERS_DATA[user_id_str]
             save_users_data(USERS_DATA)
         else: 
-            return True # Если нет даты истечения, считаем активным
+            return True 
         
     await update.message.reply_text(
         "🔒 **ДОСТУП ОГРАНИЧЕН.**\n"
@@ -75,8 +73,9 @@ async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAU
     return False
 
 async def handle_access_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Проверяет введенный пользователем код доступа."""
-    from config import SECRET_ACCESS_CODE, CHOOSING_ACTION # Импортируем здесь
+    """Проверяет введенный пользователем код доступа (используется в main.py)."""
+    # Импорт CHOOSING_ACTION здесь, чтобы избежать циклического импорта
+    from config import SECRET_ACCESS_CODE, CHOOSING_ACTION 
     
     user_input = update.message.text.strip().upper() 
     user_id = update.effective_user.id
@@ -95,4 +94,5 @@ async def handle_access_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "❌ **Неверный код.** Пожалуйста, проверьте код и введите его еще раз. "
             "Или нажмите /start, чтобы отменить."
         )
-        return -1 # Остаемся в состоянии GETTING_ACCESS_CODE
+        # Возвращаем -1, чтобы остаться в текущем состоянии ожидания кода
+        return -1 
