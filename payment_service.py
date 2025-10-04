@@ -2,9 +2,9 @@
 
 import json
 from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardRemove
+from telegram import Update
 from telegram.ext import ContextTypes
-# ✅ Импортируем все необходимое явно, кроме CHOOSING_ACTION (избегаем циклического импорта)
+# 🔥 ИСПРАВЛЕНО: Только необходимые импорты
 from config import logger, SECRET_ACCESS_CODE, ACCESS_PRICE_DISPLAY 
 
 # --- КОНФИГУРАЦИЯ ХРАНИЛИЩА ---
@@ -32,50 +32,46 @@ def save_users_data(data: dict):
 # 🔥 Глобальная переменная для хранения данных (будет сохранять состояние)
 USERS_DATA = load_users_data() 
 
-# ... (activate_pro_access, check_access остаются, как в стабильной версии)
+def activate_pro_access(user_id: int):
+    """Добавляет пользователя в базу с PRO-тарифом."""
+    user_id_str = str(user_id)
+    start_date = datetime.now()
+    expiration_date = start_date + timedelta(days=TRIAL_DURATION_DAYS)
 
-async def handle_access_code_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обрабатывает нажатие кнопки "PRO-доступ"."""
-    from config import CHOOSING_ACTION # Импортируем здесь, чтобы избежать конфликтов
+    USERS_DATA[user_id_str] = {
+        'telegram_id': user_id,
+        'tariff_name': 'PRO-TRIAL', 
+        'expiration_date': expiration_date.strftime("%Y-%m-%d"),
+        'generations_left': -1 # Безлимит
+    }
+    save_users_data(USERS_DATA)
+
+async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Проверяет, есть ли у пользователя активный доступ."""
+    user_id_str = str(user_id)
     
-    user_id_str = str(update.effective_user.id)
-    
-    if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('expiration_date'):
-        # Если доступ уже активен
-        await update.message.reply_text("✅ У вас уже активен PRO-доступ до *{expiration_date}*.".format(**USERS_DATA[user_id_str]), parse_mode='Markdown')
-        return CHOOSING_ACTION
-    
-    # Если доступа нет или он истек
+    if user_id_str in USERS_DATA:
+        user_info = USERS_DATA[user_id_str]
+        
+        expiration_date_str = user_info.get('expiration_date')
+        if expiration_date_str:
+            expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d")
+            if expiration_date >= datetime.now(): 
+                return True
+            else:
+                # Срок истек
+                del USERS_DATA[user_id_str]
+                save_users_data(USERS_DATA)
+        else: 
+            return True # Если нет даты, считаем активным (бессрочный)
+        
+    # Если доступа нет, выводим сообщение с новым дизайном
     await update.message.reply_text(
-        f"🔑 Введите **секретный код** для активации PRO-доступа (Цена: {ACCESS_PRICE_DISPLAY}).\n"
-        "Или нажмите /start для отмены.",
-        parse_mode='Markdown',
-        reply_markup=ReplyKeyboardRemove()
+        "🔒 **ДОСТУП ОГРАНИЧЕН.**\n"
+        f"Для использования PRO-функций (Gemini) требуется активация.\n"
+        f"Чтобы получить доступ, введите **секретный код** (Цена: {ACCESS_PRICE_DISPLAY}).",
+        parse_mode='Markdown'
     )
-    return GETTING_ACCESS_CODE # Переходим в состояние ожидания кода
+    return False
 
-
-async def handle_access_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Проверяет введенный пользователем код доступа (ВЫЗЫВАЕТСЯ ИЗ main.py)."""
-    from config import CHOOSING_ACTION # Импортируем здесь
-    
-    user_input = update.message.text.strip().upper() 
-    user_id = update.effective_user.id
-        
-    if user_input == SECRET_ACCESS_CODE.upper():
-        # Код верен
-        activate_pro_access(user_id)
-        await update.message.reply_text(
-            "🥳 **ПОЗДРАВЛЯЮ! Доступ активирован.**\n"
-            "Нажмите /start, чтобы начать работу.",
-            parse_mode='Markdown',
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return CHOOSING_ACTION
-        
-    else:
-        # Код неверен
-        await update.message.reply_text(
-            "❌ **Неверный код.** Пожалуйста, проверьте код и введите его еще раз."
-        )
-        return GETTING_ACCESS_CODE
+# 🔥 УДАЛЕНО: handle_access_code - перенесена в handlers.py для корректной работы ConversationHandler.
