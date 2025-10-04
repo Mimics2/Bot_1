@@ -5,13 +5,14 @@ from datetime import datetime, timedelta
 
 from telegram import Update
 from telegram.ext import ContextTypes
-from config import logger, SECRET_ACCESS_CODE, ACCESS_PRICE_DISPLAY, CHOOSING_ACTION # CHOOSING_ACTION теперь импортируется тут
+# Импорт CHOOSING_ACTION для возврата из хэндлера кода
+from config import logger, SECRET_ACCESS_CODE, ACCESS_PRICE_DISPLAY, CHOOSING_ACTION 
 
 # --- КОНФИГУРАЦИЯ ХРАНИЛИЩА ---
 USERS_DATA_FILE = 'users_data.json'
 # --- КОНФИГУРАЦИЯ ТАРИФОВ ---
 TRIAL_DURATION_DAYS = 30
-TRIAL_GENERATION_LIMIT = -1 # -1 означает безлимит (не будет списываться)
+TRIAL_GENERATION_LIMIT = -1 # -1 означает безлимит (для данного тарифа)
 
 # --- ФУНКЦИИ РАБОТЫ С ДАННЫМИ ---
 
@@ -28,7 +29,6 @@ def load_users_data() -> dict:
         return {}
     except json.JSONDecodeError:
         logger.error(f"Ошибка чтения JSON из {USERS_DATA_FILE}. Файл поврежден.")
-        # Чтобы не потерять данные, можно вернуть пустой словарь
         return {}
     except Exception as e:
         logger.error(f"Неизвестная ошибка при загрузке данных: {e}")
@@ -38,16 +38,15 @@ def save_users_data(data: dict):
     """Сохраняет данные о пользователях в JSON-файл."""
     try:
         with open(USERS_DATA_FILE, 'w', encoding='utf-8') as f:
-            # Используем indent=4 для красивого форматирования файла
-            json.dump(data, f, indent=4) 
+            json.dump(data, f, indent=4)
     except Exception as e:
         logger.error(f"Ошибка при сохранении данных в {USERS_DATA_FILE}: {e}")
 
-# Загружаем данные при старте модуля (глобально)
+# Загружаем данные при старте модуля
 USERS_DATA = load_users_data()
 
 def activate_trial_access(user_id: int):
-    """Добавляет пользователя в базу с PRO-тарифом."""
+    """Добавляет пользователя в базу с PRO-тарифом на 30 дней."""
     user_id_str = str(user_id)
     
     start_date = datetime.now()
@@ -56,7 +55,7 @@ def activate_trial_access(user_id: int):
     USERS_DATA[user_id_str] = {
         'telegram_id': user_id,
         'tariff_name': 'PRO-TRIAL', 
-        'tariff_duration': TRIAL_DURATION_DAYS, 
+        'tariff_duration': TRIAL_DURATION_DAYS,
         'generations_left': TRIAL_GENERATION_LIMIT, # -1 для безлимита
         'start_date': start_date.strftime("%Y-%m-%d"),
         'expiration_date': expiration_date.strftime("%Y-%m-%d"),
@@ -102,6 +101,7 @@ async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAU
         parse_mode='Markdown'
     )
     return False
+
 
 async def handle_access_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Проверяет введенный пользователем код доступа и активирует тариф."""
