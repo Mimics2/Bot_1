@@ -2,14 +2,14 @@
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
-# 🔥 ИСПРАВЛЕНО: Явный импорт всех необходимых констант (УДАЛЕНО: from config import *)
+# ✅ Явный импорт всех необходимых констант (УДАЛЕНО: from config import *)
 from config import (
     logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, 
     GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
 from ai_service import MASTER_PROMPT, call_gemini_api
-# 🔥 ВАЖНО: Импортируем функции и хранилище из payment_service
+# ✅ Импортируем функции и хранилище из payment_service
 from payment_service import check_access, USERS_DATA, save_users_data
 
 
@@ -34,7 +34,6 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         # 1. Проверка доступа
         if not await check_access(user_id, update, context):
-            # Если доступа нет, переходим в состояние ожидания кода
             await update.message.reply_text("Введите секретный код:", reply_markup=ReplyKeyboardRemove())
             return GETTING_ACCESS_CODE
             
@@ -54,94 +53,67 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
             return GETTING_CORRECTION
     
-    await update.message.reply_text("Пожалуйста, выберите действие на клавиатуре.")
     return CHOOSING_ACTION
-
-async def choose_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обрабатывает выбор темы и просит выбрать жанр."""
-    text = update.message.text
-    
-    if text == "⬅️ Назад": return await start(update, context) # Возвращаемся в главное меню
-    
-    context.user_data['theme'] = text
-    
-    await update.message.reply_text(
-        f"Вы выбрали тему: *{text}*.\nТеперь выберите жанр или стиль написания:",
-        parse_mode='Markdown',
-        reply_markup=ReplyKeyboardMarkup(genre_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
-    return CHOOSING_GENRE
-
-async def choose_genre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обрабатывает выбор жанра и просит ввести конкретную подтему."""
-    text = update.message.text
-    
-    if text == "⬅️ Назад":
-        await update.message.reply_text("Выберите основную тему вашего поста:", reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True))
-        return CHOOSING_THEME 
-        
-    context.user_data['genre'] = text
-    
-    await update.message.reply_text(
-        f"Вы выбрали жанр: *{text}*.\nТеперь, пожалуйста, введите **конкретную подтему**, основную идею или черновик для поста.",
-        parse_mode='Markdown',
-        reply_markup=ReplyKeyboardRemove()
-    )
-    return GETTING_TOPIC
 
 async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Генерирует пост с помощью Gemini и выводит результат."""
-    
     user_topic = update.message.text
     theme = context.user_data.get('theme', 'Общая категория')
     genre = context.user_data.get('genre', 'Информационный')
     user_id_str = str(update.effective_user.id) 
     
-    # ... (Подготовка промпта - используем стандартные заглушки) ...
-    audience = "Фрилансеры, работающие из дома"
+    audience = "Фрилансеры"
     post_length = "Средний"
-    additional_wishes = "Добавить провокационный заголовок"
+    additional_wishes = "Используй стиль, который мы обсуждали (много эмодзи, минимум запятых, от первого лица)."
+    
     prompt = MASTER_PROMPT.format(user_topic=user_topic, theme=theme, genre=genre, audience=audience, post_length=post_length, additional_wishes=additional_wishes)
     
     await update.message.reply_text("✍️ Ваш пост генерируется. Пожалуйста, подождите...")
 
     result_text = await call_gemini_api(prompt)
     
-    # ЛОГИКА СПИСАНИЯ ЛИМИТОВ (если бы они были)
-    # if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
-    #     USERS_DATA[user_id_str]['generations_left'] -= 1
-    #     save_users_data(USERS_DATA) 
-        
-    await update.message.reply_text(
-        f"✅ **ГОТОВЫЙ ПОСТ ({theme} / {genre})**:\n\n{result_text}",
-        parse_mode='Markdown'
-    )
+    if result_text.startswith("❌ ОШИБКА"):
+        await update.message.reply_text(result_text)
+    else:
+        # Логика списания лимитов
+        if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
+            USERS_DATA[user_id_str]['generations_left'] -= 1
+            save_users_data(USERS_DATA) 
+            
+        await update.message.reply_text(
+            f"✅ **ГОТОВЫЙ ПОСТ ({theme} / {genre})**:\n\n{result_text}",
+            parse_mode='Markdown'
+        )
 
     return await start(update, context)
+
 
 async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Корректирует текст с помощью Gemini."""
     correction_prompt = update.message.text
+    user_id_str = str(update.effective_user.id)
     
     prompt = (
-        f"Ты профессиональный редактор и корректор. Твоя задача — выполнить корректировку текста, "
-        f"основываясь на запросе пользователя. Запрос и текст для коррекции: '{correction_prompt}'. "
-        f"Верни только исправленный и улучшенный текст. Не добавляй никаких пояснений, только результат."
+        f"Ты профессиональный редактор и корректор. Запрос: '{correction_prompt}'. "
+        f"Верни только исправленный и улучшенный текст. Не добавляй пояснений."
     )
     
     await update.message.reply_text("🔄 Выполняю коррекцию текста...")
 
     result_text = await call_gemini_api(prompt)
 
-    # ЛОГИКА СПИСАНИЯ ЛИМИТОВ (если бы они были)
-    # if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
-    #     USERS_DATA[user_id_str]['generations_left'] -= 1
-    #     save_users_data(USERS_DATA) 
+    if result_text.startswith("❌ ОШИБКА"):
+        await update.message.reply_text(result_text)
+    else:
+        # Логика списания лимитов
+        if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
+            USERS_DATA[user_id_str]['generations_left'] -= 1
+            save_users_data(USERS_DATA) 
 
-    await update.message.reply_text(
-        f"✅ **СКОРРЕКТИРОВАННЫЙ ТЕКСТ**:\n\n{result_text}",
-        parse_mode='Markdown'
-    )
+        await update.message.reply_text(
+            f"✅ **СКОРРЕКТИРОВАННЫЙ ТЕКСТ**:\n\n{result_text}",
+            parse_mode='Markdown'
+        )
 
     return await start(update, context)
 
