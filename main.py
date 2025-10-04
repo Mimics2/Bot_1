@@ -11,16 +11,11 @@ from config import logger
 from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
 from payment_service import handle_access_code
 
-# 🔥 Вспомогательные функции для создания надежных списков кнопок
-# Эти функции теперь просто возвращают заранее определенные списки, избегая list comprehensions.
-def get_main_actions():
-    return ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]
-
-def get_theme_actions():
-    return ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема"]
-
-def get_genre_actions():
-    return ["Информационный (обучение)", "Продающий (AIDA)", "Развлекательный (лайфхак)", "Сторителлинг (личная история)", "Провокация (хайп)"]
+# 🔥 Явно задаем тексты кнопок, чтобы избежать ошибок кодировки
+MAIN_ACTIONS = ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]
+FALLBACK_CANCEL = ["❌ Отмена"]
+THEME_ACTIONS = ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема", "⬅️ Назад"]
+GENRE_ACTIONS = ["Информационный (обучение)", "Продающий (AIDA)", "Развлекательный (лайфхак)", "Сторителлинг (личная история)", "Провокация (хайп)", "⬅️ Назад"]
 
 
 def main() -> None:
@@ -35,18 +30,18 @@ def main() -> None:
         states={
             CHOOSING_ACTION: [
                 # ✅ ИСПРАВЛЕНО: Явный список для основных действий
-                MessageHandler(filters.Text(get_main_actions()), choose_action)
+                MessageHandler(filters.Text(MAIN_ACTIONS), choose_action)
             ],
             GETTING_ACCESS_CODE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
             ],
             CHOOSING_THEME: [
                 # ✅ ИСПРАВЛЕНО: Обрабатываем все кнопки ТЕМЫ и кнопку НАЗАД
-                MessageHandler(filters.Text(get_theme_actions() + ["⬅️ Назад"]), choose_theme)
+                MessageHandler(filters.Text(THEME_ACTIONS), choose_theme)
             ],
             CHOOSING_GENRE: [
                 # ✅ ИСПРАВЛЕНО: Обрабатываем все кнопки ЖАНРА и кнопку НАЗАД
-                MessageHandler(filters.Text(get_genre_actions() + ["⬅️ Назад"]), choose_genre)
+                MessageHandler(filters.Text(GENRE_ACTIONS), choose_genre)
             ],
             GETTING_TOPIC: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, generate_post)
@@ -56,7 +51,7 @@ def main() -> None:
             ],
         },
         # Обработчик кнопки "Отмена" всегда срабатывает
-        fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), cancel)],
+        fallbacks=[MessageHandler(filters.Text(FALLBACK_CANCEL), cancel)],
         allow_reentry=True
     )
 
