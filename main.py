@@ -25,7 +25,8 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                MessageHandler(filters.Text([item for sublist in main_keyboard for item in sublist if item != "❌ Отмена"]), choose_action)
+                # 🔥 ИСПРАВЛЕНИЕ: Используем явный список текстов кнопок для надежности
+                MessageHandler(filters.Text(["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]), choose_action)
             ],
             GETTING_ACCESS_CODE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
@@ -43,6 +44,7 @@ def main() -> None:
                  MessageHandler(filters.TEXT & ~filters.COMMAND, correct_post)
             ],
         },
+        # Обработчик кнопки "Отмена" всегда срабатывает
         fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), cancel)],
         allow_reentry=True
     )
