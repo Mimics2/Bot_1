@@ -30,38 +30,45 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text
     user_id = update.effective_user.id
     
-    if text in ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]:
-        
-        if not await check_access(user_id, update, context):
-            # Если доступа нет, переходим в состояние ожидания кода (сообщение отправляется в check_access)
-            await update.message.reply_text("Введите секретный код:", reply_markup=ReplyKeyboardRemove())
-            return GETTING_ACCESS_CODE
-            
-        # Если доступ есть, продолжаем, как раньше
-        if text == "🆕 Начать новый пост":
-            await update.message.reply_text(
-                "Отлично! Теперь выберите основную тему вашего поста:",
-                reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
-            )
-            return CHOOSING_THEME
-        
-        elif text == "⚙️ Корректировать предыдущий":
-            await update.message.reply_text(
-                "Пожалуйста, отправьте мне текст, который нужно скорректировать, "
-                "и **подробно укажите**, что именно нужно изменить.",
-                parse_mode='Markdown',
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return GETTING_CORRECTION
+    # Мы знаем, что текст будет либо "Начать новый пост", либо "Корректировать предыдущий"
+    # благодаря фильтру в main.py, поэтому дополнительная проверка не нужна.
     
-    await update.message.reply_text("Пожалуйста, выберите действие на клавиатуре.")
+    if not await check_access(user_id, update, context):
+        # Если доступа нет, переходим в состояние ожидания кода
+        await update.message.reply_text("Введите секретный код:", reply_markup=ReplyKeyboardRemove())
+        return GETTING_ACCESS_CODE
+        
+    # Если доступ есть, продолжаем, как раньше
+    if text == "🆕 Начать новый пост":
+        await update.message.reply_text(
+            "Отлично! Теперь выберите основную тему вашего поста:",
+            reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return CHOOSING_THEME
+    
+    elif text == "⚙️ Корректировать предыдущий":
+        await update.message.reply_text(
+            "Пожалуйста, отправьте мне текст, который нужно скорректировать, "
+            "и **подробно укажите**, что именно нужно изменить.",
+            parse_mode='Markdown',
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return GETTING_CORRECTION
+    
+    # Этот код не должен быть достигнут, но на всякий случай
     return CHOOSING_ACTION
 
 async def choose_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обрабатывает выбор темы и просит выбрать жанр."""
     text = update.message.text
     
-    if text == "⬅️ Назад": return await start(update, context)
+    if text == "⬅️ Назад": 
+        # 🔥 ИСПРАВЛЕНИЕ: Возвращаем состояние CHOOSING_ACTION и отправляем главное меню
+        await update.message.reply_text(
+            "Возвращаемся в главное меню. Выберите, что будем делать:",
+            reply_markup=ReplyKeyboardMarkup(main_keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return CHOOSING_ACTION 
     
     context.user_data['theme'] = text
     
@@ -77,7 +84,11 @@ async def choose_genre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = update.message.text
     
     if text == "⬅️ Назад":
-        await update.message.reply_text("Выберите основную тему вашего поста:", reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True))
+        # 🔥 ИСПРАВЛЕНИЕ: Возвращаем состояние CHOOSING_THEME и отправляем меню тем
+        await update.message.reply_text(
+            "Возвращаемся к выбору темы. Выберите основную тему вашего поста:", 
+            reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
         return CHOOSING_THEME 
         
     context.user_data['genre'] = text
@@ -89,13 +100,15 @@ async def choose_genre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     )
     return GETTING_TOPIC
 
+# ... (функции generate_post, correct_post, cancel остаются без изменений, кроме возврата start)
+
 async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Генерирует пост с помощью Gemini и выводит результат."""
     
     user_topic = update.message.text
     theme = context.user_data.get('theme', 'Общая категория')
     genre = context.user_data.get('genre', 'Информационный')
-    user_id_str = str(update.effective_user.id) # Получаем ID пользователя
+    user_id_str = str(update.effective_user.id) 
     
     audience = "Фрилансеры, работающие из дома, которые ищут мотивацию и продуктивность."
     post_length = "Средний (2-3 абзаца, с маркированными списками)."
@@ -115,10 +128,9 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     result_text = await call_gemini_api(prompt)
     
     # --- ЛОГИКА СПИСАНИЯ ГЕНЕРАЦИИ ---
-    # Списываем одну генерацию, только если это не безлимит (-1) и осталось > 0
     if user_id_str in USERS_DATA and USERS_DATA[user_id_str]['generations_left'] > 0:
         USERS_DATA[user_id_str]['generations_left'] -= 1
-        save_users_data(USERS_DATA) # Сохраняем изменения в файл
+        save_users_data(USERS_DATA) 
         
     # --- КОНЕЦ ЛОГИКИ СПИСАНИЯ ГЕНЕРАЦИИ ---
         
@@ -127,12 +139,13 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         parse_mode='Markdown'
     )
 
+    # 🔥 ИСПРАВЛЕНИЕ: Возвращаем состояние CHOOSING_ACTION (главное меню)
     return await start(update, context)
 
 async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Корректирует текст с помощью Gemini."""
     correction_prompt = update.message.text
-    user_id_str = str(update.effective_user.id) # Получаем ID пользователя
+    user_id_str = str(update.effective_user.id) 
     
     prompt = (
         f"Ты профессиональный редактор и корректор. Твоя задача — выполнить корректировку текста, "
@@ -145,10 +158,9 @@ async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     result_text = await call_gemini_api(prompt)
 
     # --- ЛОГИКА СПИСАНИЯ ГЕНЕРАЦИИ ---
-    # Списываем одну генерацию, только если это не безлимит (-1) и осталось > 0
     if user_id_str in USERS_DATA and USERS_DATA[user_id_str]['generations_left'] > 0:
         USERS_DATA[user_id_str]['generations_left'] -= 1
-        save_users_data(USERS_DATA) # Сохраняем изменения в файл
+        save_users_data(USERS_DATA) 
         
     # --- КОНЕЦ ЛОГИКИ СПИСАНИЯ ГЕНЕРАЦИИ ---
     
@@ -157,6 +169,7 @@ async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         parse_mode='Markdown'
     )
 
+    # 🔥 ИСПРАВЛЕНИЕ: Возвращаем состояние CHOOSING_ACTION (главное меню)
     return await start(update, context)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
