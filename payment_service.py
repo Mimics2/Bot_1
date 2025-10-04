@@ -4,8 +4,9 @@ import json
 from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
-# 🔥 ИСПРАВЛЕНО: Только необходимые импорты
+# Импортируем только то, что нужно
 from config import logger, SECRET_ACCESS_CODE, ACCESS_PRICE_DISPLAY 
+
 
 # --- КОНФИГУРАЦИЯ ХРАНИЛИЩА ---
 USERS_DATA_FILE = 'users_data.json'
@@ -19,24 +20,25 @@ def load_users_data() -> dict:
         with open(USERS_DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
+        # Файл не найден или пуст - создаем пустой словарь
         return {}
 
 def save_users_data(data: dict):
     """Сохраняет данные о пользователях в JSON-файл."""
     try:
         with open(USERS_DATA_FILE, 'w', encoding='utf-8') as f:
+            # Убедитесь, что файл users_data.json создан в папке проекта
             json.dump(data, f, indent=4, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Ошибка при сохранении данных в {USERS_DATA_FILE}: {e}")
 
-# 🔥 Глобальная переменная для хранения данных (будет сохранять состояние)
+# 🔥 Глобальная переменная для хранения данных
 USERS_DATA = load_users_data() 
 
 def activate_pro_access(user_id: int):
-    """Добавляет пользователя в базу с PRO-тарифом."""
+    """Активирует PRO-доступ для пользователя и сохраняет в JSON."""
     user_id_str = str(user_id)
-    start_date = datetime.now()
-    expiration_date = start_date + timedelta(days=TRIAL_DURATION_DAYS)
+    expiration_date = datetime.now() + timedelta(days=TRIAL_DURATION_DAYS)
 
     USERS_DATA[user_id_str] = {
         'telegram_id': user_id,
@@ -47,7 +49,7 @@ def activate_pro_access(user_id: int):
     save_users_data(USERS_DATA)
 
 async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Проверяет, есть ли у пользователя активный доступ."""
+    """Проверяет, есть ли у пользователя активный доступ (через JSON)."""
     user_id_str = str(user_id)
     
     if user_id_str in USERS_DATA:
@@ -58,14 +60,12 @@ async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAU
             expiration_date = datetime.strptime(expiration_date_str, "%Y-%m-%d")
             if expiration_date >= datetime.now(): 
                 return True
-            else:
-                # Срок истек
-                del USERS_DATA[user_id_str]
-                save_users_data(USERS_DATA)
+            # Срок истек, удаляем
+            del USERS_DATA[user_id_str]
+            save_users_data(USERS_DATA)
         else: 
-            return True # Если нет даты, считаем активным (бессрочный)
+            return True # Если нет даты истечения, считаем активным
         
-    # Если доступа нет, выводим сообщение с новым дизайном
     await update.message.reply_text(
         "🔒 **ДОСТУП ОГРАНИЧЕН.**\n"
         f"Для использования PRO-функций (Gemini) требуется активация.\n"
@@ -74,4 +74,25 @@ async def check_access(user_id: int, update: Update, context: ContextTypes.DEFAU
     )
     return False
 
-# 🔥 УДАЛЕНО: handle_access_code - перенесена в handlers.py для корректной работы ConversationHandler.
+async def handle_access_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Проверяет введенный пользователем код доступа."""
+    from config import SECRET_ACCESS_CODE, CHOOSING_ACTION # Импортируем здесь
+    
+    user_input = update.message.text.strip().upper() 
+    user_id = update.effective_user.id
+        
+    if user_input == SECRET_ACCESS_CODE.upper():
+        activate_pro_access(user_id)
+        await update.message.reply_text(
+            "🎉 **ДОСТУП АКТИВИРОВАН!** Теперь все функции PRO-бота ваши.\n"
+            "Нажмите /start, чтобы начать работу.",
+            parse_mode='Markdown'
+        )
+        return CHOOSING_ACTION
+        
+    else:
+        await update.message.reply_text(
+            "❌ **Неверный код.** Пожалуйста, проверьте код и введите его еще раз. "
+            "Или нажмите /start, чтобы отменить."
+        )
+        return -1 # Остаемся в состоянии GETTING_ACCESS_CODE
