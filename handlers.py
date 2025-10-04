@@ -2,21 +2,21 @@
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
-# ✅ ИСПРАВЛЕНО: Явный импорт всех необходимых констант (УДАЛЕНО: from config import *)
+# 🔥 ИСПРАВЛЕНО: Явный импорт всех необходимых констант (УДАЛЕНО: from config import *)
 from config import (
     logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, 
     GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
 from ai_service import MASTER_PROMPT, call_gemini_api
-# 🔥 ИСПРАВЛЕНИЕ: Импорт из payment_service должен быть полным
-from payment_service import check_access, handle_access_code, USERS_DATA, save_users_data
+# 🔥 ВАЖНО: Импортируем функции и хранилище из payment_service
+from payment_service import check_access, USERS_DATA, save_users_data
 
 
 # --- ОБРАБОТЧИКИ ДИАЛОГА ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Начинает диалог и выводит главное меню."""
+    """Начинает диалог."""
     logger.info(f"Получена команда /start от пользователя: {update.effective_user.id}")
     
     await update.message.reply_text(
@@ -30,41 +30,38 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text
     user_id = update.effective_user.id
     
-    # 1. Проверка доступа
-    if not await check_access(user_id, update, context):
-        await update.message.reply_text("Введите секретный код:", reply_markup=ReplyKeyboardRemove())
-        return GETTING_ACCESS_CODE
+    if text in ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]:
         
-    # 2. Если доступ есть, продолжаем
-    if text == "🆕 Начать новый пост":
-        await update.message.reply_text(
-            "Отлично! Теперь выберите основную тему вашего поста:",
-            reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
-        )
-        return CHOOSING_THEME
+        # 1. Проверка доступа
+        if not await check_access(user_id, update, context):
+            # Если доступа нет, переходим в состояние ожидания кода
+            await update.message.reply_text("Введите секретный код:", reply_markup=ReplyKeyboardRemove())
+            return GETTING_ACCESS_CODE
+            
+        # 2. Если доступ есть, продолжаем
+        if text == "🆕 Начать новый пост":
+            await update.message.reply_text(
+                "Отлично! Теперь выберите основную тему вашего поста:",
+                reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
+            )
+            return CHOOSING_THEME
+        
+        elif text == "⚙️ Корректировать предыдущий":
+            await update.message.reply_text(
+                "Пожалуйста, отправьте мне текст, который нужно скорректировать, "
+                "и **подробно укажите**, что именно нужно изменить.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return GETTING_CORRECTION
     
-    elif text == "⚙️ Корректировать предыдущий":
-        await update.message.reply_text(
-            "Пожалуйста, отправьте мне текст, который нужно скорректировать, "
-            "и **подробно укажите**, что именно нужно изменить.",
-            parse_mode='Markdown',
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return GETTING_CORRECTION
-    
-    return CHOOSING_ACTION 
+    await update.message.reply_text("Пожалуйста, выберите действие на клавиатуре.")
+    return CHOOSING_ACTION
 
 async def choose_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обрабатывает выбор темы и просит выбрать жанр."""
     text = update.message.text
     
-    if text == "⬅️ Назад": 
-        # ✅ ВОЗВРАТ в главное меню
-        await update.message.reply_text(
-            "Возвращаемся в главное меню. Выберите, что будем делать:",
-            reply_markup=ReplyKeyboardMarkup(main_keyboard, one_time_keyboard=True, resize_keyboard=True)
-        )
-        return CHOOSING_ACTION
+    if text == "⬅️ Назад": return await start(update, context) # Возвращаемся в главное меню
     
     context.user_data['theme'] = text
     
@@ -80,11 +77,7 @@ async def choose_genre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = update.message.text
     
     if text == "⬅️ Назад":
-        # ✅ ВОЗВРАТ в меню тем
-        await update.message.reply_text(
-            "Возвращаемся к выбору темы. Выберите основную тему вашего поста:", 
-            reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
-        )
+        await update.message.reply_text("Выберите основную тему вашего поста:", reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True))
         return CHOOSING_THEME 
         
     context.user_data['genre'] = text
@@ -104,17 +97,20 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     genre = context.user_data.get('genre', 'Информационный')
     user_id_str = str(update.effective_user.id) 
     
-    # ... (Подготовка промпта) ...
-
+    # ... (Подготовка промпта - используем стандартные заглушки) ...
+    audience = "Фрилансеры, работающие из дома"
+    post_length = "Средний"
+    additional_wishes = "Добавить провокационный заголовок"
+    prompt = MASTER_PROMPT.format(user_topic=user_topic, theme=theme, genre=genre, audience=audience, post_length=post_length, additional_wishes=additional_wishes)
+    
     await update.message.reply_text("✍️ Ваш пост генерируется. Пожалуйста, подождите...")
 
-    result_text = await call_gemini_api(MASTER_PROMPT.format(user_topic=user_topic, theme=theme, genre=genre, audience="Фрилансеры", post_length="Средний", additional_wishes=""))
+    result_text = await call_gemini_api(prompt)
     
-    # --- ЛОГИКА СПИСАНИЯ ГЕНЕРАЦИИ (Добавлено для PRO-лимитов) ---
-    if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
-        USERS_DATA[user_id_str]['generations_left'] -= 1
-        save_users_data(USERS_DATA) 
-    # --- КОНЕЦ ЛОГИКИ СПИСАНИЯ ГЕНЕРАЦИИ ---
+    # ЛОГИКА СПИСАНИЯ ЛИМИТОВ (если бы они были)
+    # if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
+    #     USERS_DATA[user_id_str]['generations_left'] -= 1
+    #     save_users_data(USERS_DATA) 
         
     await update.message.reply_text(
         f"✅ **ГОТОВЫЙ ПОСТ ({theme} / {genre})**:\n\n{result_text}",
@@ -126,21 +122,22 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Корректирует текст с помощью Gemini."""
     correction_prompt = update.message.text
-    user_id_str = str(update.effective_user.id) 
     
-    # ... (Подготовка промпта) ...
+    prompt = (
+        f"Ты профессиональный редактор и корректор. Твоя задача — выполнить корректировку текста, "
+        f"основываясь на запросе пользователя. Запрос и текст для коррекции: '{correction_prompt}'. "
+        f"Верни только исправленный и улучшенный текст. Не добавляй никаких пояснений, только результат."
+    )
     
     await update.message.reply_text("🔄 Выполняю коррекцию текста...")
 
-    prompt = (f"Ты профессиональный редактор. Запрос: '{correction_prompt}'. Верни только исправленный текст.")
     result_text = await call_gemini_api(prompt)
 
-    # --- ЛОГИКА СПИСАНИЯ ГЕНЕРАЦИИ (Добавлено для PRO-лимитов) ---
-    if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
-        USERS_DATA[user_id_str]['generations_left'] -= 1
-        save_users_data(USERS_DATA) 
-    # --- КОНЕЦ ЛОГИКИ СПИСАНИЯ ГЕНЕРАЦИИ ---
-    
+    # ЛОГИКА СПИСАНИЯ ЛИМИТОВ (если бы они были)
+    # if user_id_str in USERS_DATA and USERS_DATA[user_id_str].get('generations_left', 0) > 0:
+    #     USERS_DATA[user_id_str]['generations_left'] -= 1
+    #     save_users_data(USERS_DATA) 
+
     await update.message.reply_text(
         f"✅ **СКОРРЕКТИРОВАННЫЙ ТЕКСТ**:\n\n{result_text}",
         parse_mode='Markdown'
