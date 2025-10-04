@@ -2,6 +2,7 @@
 
 from google import genai
 from google.genai.errors import APIError
+# ❌ ИЗМЕНЕНО: Импортируем список ключей
 from config import GEMINI_API_KEYS, logger
 import itertools
 import time 
@@ -38,22 +39,26 @@ async def call_gemini_api(prompt: str, model: str = 'gemini-2.5-flash') -> str:
     
     for attempt in range(max_retries):
         
+        # 1. Получаем следующий ключ из глобального цикла
         current_api_key = next(key_cycle)
         logger.info(f"🔑 Попытка {attempt + 1}/{max_retries}. Используется ключ, начинающийся с {current_api_key[:10]}...")
         
         try:
+            # 2. Инициализируем клиента с текущим ключом
             client = genai.Client(api_key=current_api_key)
             
-            # Используем generate_content_async для асинхронной работы
-            response = await client.models.generate_content_async(
+            # 3. Выполняем асинхронный вызов API
+            response = await client.models.generate_content_async( # ✅ ИСПРАВЛЕНО: Теперь используется async-метод
                 model=model,
                 contents=prompt
             )
             
+            # 4. Если успех, возвращаем текст
             logger.info(f"✅ Успешная генерация с ключом {current_api_key[:10]}...")
             return response.text
             
         except APIError as e:
+            # 5. Если ошибка API (например, лимит, или ключ недействителен)
             logger.error(f"❌ Ошибка API с ключом {current_api_key[:10]}...: {e}")
             
             if attempt == max_retries - 1:
@@ -63,6 +68,7 @@ async def call_gemini_api(prompt: str, model: str = 'gemini-2.5-flash') -> str:
             time.sleep(1) # Пауза перед переключением на следующий ключ
             
         except Exception as e:
+            # 6. Обработка других неожиданных ошибок
             logger.error(f"❌ Непредвиденная ошибка во время вызова API: {e}")
             return "Извините, произошла непредвиденная ошибка во время генерации текста."
 
