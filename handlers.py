@@ -2,12 +2,14 @@
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
+# ✅ ИСПРАВЛЕНО: Явный импорт всех необходимых элементов из config
 from config import (
     logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, 
     GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
 from ai_service import MASTER_PROMPT, call_gemini_api
+# 🔥 ВОССТАНОВЛЕНА ЛОГИКА С ЛИМИТАМИ/ПОСТОЯННЫМ ХРАНЕНИЕМ ДАННЫХ
 from payment_service import check_access, handle_access_code, USERS_DATA, save_users_data 
 
 
@@ -28,12 +30,10 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text
     user_id = update.effective_user.id
     
-    # Сначала проверяем доступ
     if not await check_access(user_id, update, context):
         await update.message.reply_text("Введите секретный код:", reply_markup=ReplyKeyboardRemove())
         return GETTING_ACCESS_CODE
         
-    # Если доступ есть
     if text == "🆕 Начать новый пост":
         await update.message.reply_text(
             "Отлично! Теперь выберите основную тему вашего поста:",
@@ -57,12 +57,11 @@ async def choose_theme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = update.message.text
     
     if text == "⬅️ Назад": 
-        # ✅ Явный возврат в главное меню
         await update.message.reply_text(
             "Возвращаемся в главное меню. Выберите, что будем делать:",
             reply_markup=ReplyKeyboardMarkup(main_keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
-        return CHOOSING_ACTION 
+        return CHOOSING_ACTION
     
     context.user_data['theme'] = text
     
@@ -78,12 +77,11 @@ async def choose_genre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = update.message.text
     
     if text == "⬅️ Назад":
-        # ✅ Явный возврат в меню тем
         await update.message.reply_text(
             "Возвращаемся к выбору темы. Выберите основную тему вашего поста:", 
             reply_markup=ReplyKeyboardMarkup(theme_keyboard, one_time_keyboard=True, resize_keyboard=True)
         )
-        return CHOOSING_THEME 
+        return CHOOSING_THEME
         
     context.user_data['genre'] = text
     
@@ -100,9 +98,20 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user_topic = update.message.text
     theme = context.user_data.get('theme', 'Общая категория')
     genre = context.user_data.get('genre', 'Информационный')
-    user_id_str = str(update.effective_user.id) 
+    user_id_str = str(update.effective_user.id)
     
-    # ... (промпт) ...
+    audience = "Фрилансеры, работающие из дома, которые ищут мотивацию и продуктивность."
+    post_length = "Средний (2-3 абзаца, с маркированными списками)."
+    additional_wishes = "Добавить провокационный заголовок, использовать дружелюбный, но экспертный тон и не писать 'и вот почему'."
+
+    prompt = MASTER_PROMPT.format(
+        user_topic=user_topic,
+        theme=theme,
+        genre=genre,
+        audience=audience,
+        post_length=post_length,
+        additional_wishes=additional_wishes
+    )
     
     await update.message.reply_text("✍️ Ваш пост генерируется. Пожалуйста, подождите...")
 
@@ -125,9 +134,13 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Корректирует текст с помощью Gemini."""
     correction_prompt = update.message.text
-    user_id_str = str(update.effective_user.id) 
+    user_id_str = str(update.effective_user.id)
     
-    # ... (промпт) ...
+    prompt = (
+        f"Ты профессиональный редактор и корректор. Твоя задача — выполнить корректировку текста, "
+        f"основываясь на запросе пользователя. Запрос и текст для коррекции: '{correction_prompt}'. "
+        f"Верни только исправленный и улучшенный текст. Не добавляй никаких пояснений, только результат."
+    )
     
     await update.message.reply_text("🔄 Выполняю коррекцию текста...")
 
