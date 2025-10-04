@@ -2,16 +2,14 @@
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
-# 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Явный импорт ВСЕХ констант и клавиатур
+# 🔥 ИСПРАВЛЕНИЕ: Явный импорт констант и клавиатур
 from config import (
     logger, CHOOSING_ACTION, CHOOSING_THEME, CHOOSING_GENRE, 
     GETTING_TOPIC, GETTING_CORRECTION, GETTING_ACCESS_CODE,
     main_keyboard, theme_keyboard, genre_keyboard
 )
-# Явный импорт функций
 from ai_service import MASTER_PROMPT, call_gemini_api
-from payment_service import check_access, activate_pro_access, handle_access_code 
-# handle_access_code остается здесь, так как импортируется в main.py
+from payment_service import check_access, activate_pro_access # handle_access_code импортируется в main.py
 
 
 # --- ОБРАБОТЧИКИ ДИАЛОГА ---
@@ -26,7 +24,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         parse_mode='Markdown',
         reply_markup=ReplyKeyboardMarkup(main_keyboard, one_time_keyboard=True, resize_keyboard=True)
     )
-    # Очищаем данные диалога для чистого старта
     context.user_data.clear() 
     return CHOOSING_ACTION
 
@@ -38,14 +35,14 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if text == "❌ Отмена": return await cancel(update, context) 
     
     # --- Проверка доступа для всех PRO-функций ---
-    if text in ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]:
+    if text in ["✨ Новый пост", "⚙️ Корректировка текста"]:
         
-        # Если доступа нет, перенаправляем на ввод кода. check_access уже вывел сообщение
+        # Если доступа нет, переходим в состояние ожидания кода
         if not await check_access(user_id, update, context):
             return GETTING_ACCESS_CODE
         
         # Если доступ есть
-        if text == "🆕 Начать новый пост":
+        if text == "✨ Новый пост":
             await update.message.reply_text(
                 "✨ Отлично! Определитесь с *основной темой* для вашего контента:",
                 parse_mode='Markdown',
@@ -53,9 +50,9 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
             return CHOOSING_THEME
         
-        elif text == "⚙️ Корректировать предыдущий":
+        elif text == "⚙️ Корректировка текста":
             await update.message.reply_text(
-                "📝 Пришлите текст и **четкое указание**, что нужно изменить. Например: 'Улучши тон, сделай текст короче и добавь эмодзи'.",
+                "📝 Пришлите текст и **четкое указание**, что именно нужно изменить (например, 'Улучши тон, сделай текст короче и добавь эмодзи').",
                 parse_mode='Markdown',
                 reply_markup=ReplyKeyboardRemove()
             )
@@ -97,9 +94,7 @@ async def choose_genre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return GETTING_TOPIC
 
 async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Генерирует пост с помощью Gemini и выводит результат с новым дизайном."""
-    
-    # ... (Ваш промпт-логика) ...
+    """Генерирует пост с помощью Gemini и выводит результат."""
     
     await update.message.reply_text("⏳ *Генерирую контент...* Это займет несколько секунд.", parse_mode='Markdown')
 
@@ -128,8 +123,6 @@ async def generate_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 async def correct_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Корректирует текст с помощью Gemini."""
-    
-    # ... (Подготовка промпта) ...
     
     await update.message.reply_text("🔄 *Выполняю коррекцию текста...*", parse_mode='Markdown')
 
