@@ -1,7 +1,6 @@
-
 # main.py
 
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
 from telegram import Update 
 # Импортируем ВСЕ константы и КЛАВИАТУРЫ из config.py
 from config import (
@@ -10,11 +9,13 @@ from config import (
     main_keyboard, theme_keyboard, genre_keyboard
 )
 # Импортируем функции из handlers.py и payment_service.py
-from handlers import start, choose_action, choose_theme, choose_genre, generate_post, correct_post, cancel 
-from payment_service import handle_access_code
+from handlers import (
+    start, choose_action, choose_theme, choose_genre, 
+    generate_post, correct_post, cancel, handle_access_code
+)
 
-# 🔥 Явные списки кнопок (для надежности)
-MAIN_ACTIONS = ["🆕 Начать новый пост", "⚙️ Корректировать предыдущий"]
+# 🔥 Явные списки кнопок для надежности фильтров (удаляем list comprehension)
+MAIN_ACTIONS = ["✨ Новый пост", "⚙️ Корректировать текст", "🔑 PRO-доступ"] 
 THEME_ACTIONS_ALL = ["Бизнес", "Технологии", "Путешествия", "Здоровье", "Личный бренд", "Другая тема", "⬅️ Назад"]
 GENRE_ACTIONS_ALL = ["Информационный (обучение)", "Продающий (AIDA)", "Развлекательный (лайфхак)", "Сторителлинг (личная история)", "Провокация (хайп)", "⬅️ Назад"]
 FALLBACK_CANCEL = ["❌ Отмена"]
@@ -31,18 +32,17 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                # ✅ Используем явный список кнопок
-                MessageHandler(filters.Text(MAIN_ACTIONS), choose_action)
+                # 🔥 НОВЫЙ ДИЗАЙН: Кнопка PRO-доступ теперь тоже обрабатывается здесь,
+                # но ведет в ту же логику, что и другие кнопки, если доступа нет.
+                MessageHandler(filters.Text(MAIN_ACTIONS), choose_action) 
             ],
             GETTING_ACCESS_CODE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_access_code)
             ],
             CHOOSING_THEME: [
-                # ✅ Используем явный список кнопок
                 MessageHandler(filters.Text(THEME_ACTIONS_ALL), choose_theme)
             ],
             CHOOSING_GENRE: [
-                # ✅ Используем явный список кнопок
                 MessageHandler(filters.Text(GENRE_ACTIONS_ALL), choose_genre)
             ],
             GETTING_TOPIC: [
@@ -52,8 +52,10 @@ def main() -> None:
                  MessageHandler(filters.TEXT & ~filters.COMMAND, correct_post)
             ],
         },
-        # ✅ Используем явный список кнопок
-        fallbacks=[MessageHandler(filters.Text(FALLBACK_CANCEL), cancel)],
+        fallbacks=[
+            CommandHandler("start", start), # Можно вернуться в начало в любой момент
+            MessageHandler(filters.Text(FALLBACK_CANCEL), cancel)
+        ],
         allow_reentry=True
     )
 
