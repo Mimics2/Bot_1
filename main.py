@@ -10,7 +10,7 @@ BOT_TOKEN = "8335870133:AAElDxFGCpn55PY8of1oSkAOEq8KsYFfdqM"
 # Список ID каналов, на которые нужно проверить подписку
 # ВАЖНО: ID каналов начинаются с '-100'
 CHANNELS = [
-    -1002910637134  # ID второго канала
+-1002910637134
     # Добавьте столько каналов, сколько вам нужно
 ]
 
@@ -82,10 +82,12 @@ def start_handler(message):
         conn.close()
         
         keyboard = types.InlineKeyboardMarkup()
-
-        # ИСПРАВЛЕНИЕ: Добавлены кнопки со ссылками на каналы
+        
+        # ДОБАВЛЕНО: Кнопки для каналов, на которые нужно подписаться
         for i, channel_id in enumerate(CHANNELS):
-            # Создаем кнопку с ссылкой на канал
+            # Внимание: для публичных каналов ссылка t.me/channel_name
+            # Для приватных каналов ссылка t.me/c/ID
+            # Здесь используется t.me/c/ID, так как каналы закрытые
             keyboard.add(types.InlineKeyboardButton(text=f"Канал {i+1}", url=f"https://t.me/c/{str(abs(channel_id))[4:]}"))
         
         # Добавляем реферальные кнопки
