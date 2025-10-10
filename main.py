@@ -9,7 +9,7 @@ from aiogram.client.default import DefaultBotProperties
 
 # --- Настройка ---
 # Вставьте сюда токен вашего бота, полученный от BotFather
-BOT_TOKEN = "8335870133:AAHwcXoy3usOWT4Y9F8cSOPiHwX5OO33hI8" 
+BOT_TOKEN = "8335870133:AAElDxFGCpn55PY8of1oSkAOEq8KsYFfdqM" 
 
 # Список ID каналов, на которые нужно проверить подписку
 # ВАЖНО: ID каналов начинаются с '-100'
