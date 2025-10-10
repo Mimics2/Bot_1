@@ -13,12 +13,13 @@ BOT_TOKEN = "8335870133:AAHwcXoy3usOWT4Y9F8cSOPiHwX5OO33hI8"
 
 # Список ID каналов, на которые нужно проверить подписку
 # ВАЖНО: ID каналов начинаются с '-100'
-CHANNELS = [-1002910637134
-   # Добавьте столько каналов, сколько вам нужно
+CHANNELS = [
+    -1002910637134  # ID второго канала
+    # Добавьте столько каналов, сколько вам нужно
 ]
 
 # Ссылка-приглашение в ваш приватный канал или ссылку на ресурс
-ACCESS_LINK = ""
+ACCESS_LINK = "https://t.me/+AbcDefGhiJkLmNoPqRs"
 
 # Список ID администраторов
 ADMINS = [6646433980]  # ЗАМЕНИТЕ на свои ID!
@@ -31,7 +32,6 @@ class ReferralState(StatesGroup):
     waiting_for_referral_data = State()
 
 # --- Инициализация ---
-# Исправленная строка инициализации Bot
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
@@ -74,7 +74,8 @@ async def check_subscription(user_id: int):
     return True
 
 # --- Обработчик команды /start ---
-@dp.message(commands=["start"])
+# ИСПРАВЛЕНИЕ: Используем F.command('start') вместо commands=["start"]
+@dp.message(F.command('start'))
 async def start_handler(message: types.Message):
     add_user_to_db(message.from_user.id)
     is_subscribed = await check_subscription(message.from_user.id)
@@ -120,7 +121,8 @@ async def check_channels_callback(callback_query: types.CallbackQuery):
         await callback_query.answer("Вы ещё не подписались на все каналы. Пожалуйста, подпишитесь и нажмите кнопку снова.", show_alert=True)
 
 # --- Админ-панель ---
-@dp.message(F.from_user.id.in_(ADMINS), commands=["admin_panel"])
+# ИСПРАВЛЕНИЕ: Используем F.command('admin_panel')
+@dp.message(F.from_user.id.in_(ADMINS), F.command('admin_panel'))
 async def admin_panel(message: types.Message):
     keyboard = types.InlineKeyboardMarkup(
         inline_keyboard=[
@@ -132,7 +134,7 @@ async def admin_panel(message: types.Message):
 
 # --- Рассылка ---
 @dp.callback_query(F.data == "broadcast")
-@dp.message(F.from_user.id.in_(ADMINS), F.text == "Создать рассылку")
+@dp.message(F.from_user.id.in_(ADMINS), F.command('broadcast'))
 async def start_broadcast(message: types.Message, state: FSMContext):
     await message.answer("Отправьте сообщение для рассылки. Рассылка будет отправлена всем пользователям бота.")
     await state.set_state(BroadcastState.waiting_for_message)
@@ -163,7 +165,7 @@ async def send_broadcast(message: types.Message, state: FSMContext):
 
 # --- Управление рефералами ---
 @dp.callback_query(F.data == "manage_referrals")
-@dp.message(F.from_user.id.in_(ADMINS), F.text == "Управление рефералами")
+@dp.message(F.from_user.id.in_(ADMINS), F.command('manage_referrals'))
 async def manage_referrals(message: types.Message):
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
