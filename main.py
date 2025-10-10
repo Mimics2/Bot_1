@@ -10,7 +10,7 @@ BOT_TOKEN = "8335870133:AAElDxFGCpn55PY8of1oSkAOEq8KsYFfdqM"
 # Список ID каналов, на которые нужно проверить подписку
 # ВАЖНО: ID каналов начинаются с '-100'
 CHANNELS = [
-    -1002910637134,  # ID второго канала
+    -1002910637134  # ID второго канала
     # Добавьте столько каналов, сколько вам нужно
 ]
 
@@ -82,6 +82,12 @@ def start_handler(message):
         conn.close()
         
         keyboard = types.InlineKeyboardMarkup()
+
+        # ИСПРАВЛЕНИЕ: Добавлены кнопки со ссылками на каналы
+        for i, channel_id in enumerate(CHANNELS):
+            # Создаем кнопку с ссылкой на канал
+            keyboard.add(types.InlineKeyboardButton(text=f"Канал {i+1}", url=f"https://t.me/c/{str(abs(channel_id))[4:]}"))
+        
         # Добавляем реферальные кнопки
         if referrals:
             for title, url in referrals:
@@ -224,4 +230,3 @@ def add_referral_data(message):
 if __name__ == "__main__":
     init_db()
     bot.polling(none_stop=True)
-
