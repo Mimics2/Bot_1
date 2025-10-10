@@ -1,142 +1,214 @@
 import asyncio
-import logging
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.enums import ChatMemberStatus, ParseMode
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+import sqlite3
 
-# Настройка логирования для вывода ошибок
-logging.basicConfig(level=logging.INFO)
+# --- Настройка ---
+# Вставьте сюда токен вашего бота, полученный от BotFather
+BOT_TOKEN = "8335870133:AAHwcXoy3usOWT4Y9F8cSOPiHwX5OO33hI8" 
 
-# Твой токен бота, полученный от BotFather
-BOT_TOKEN = "8335870133:AAHWCXOY3USOWT4Y9F8CSOPIHWX5OO33HI8"
-# Твой ID администратора
-ADMINS = [6646433980]
+# Список ID каналов, на которые нужно проверить подписку
+CHANNELS = [-1002910637134 # ID первого канала
+]
 
-# ID приватного канала для проверки подписки
-# Замени этот ID на реальный ID своего канала.
-# Как его узнать: добавь @userinfobot в свой канал, и он покажет ID канала
-CHANNEL_ID = -1001234567890
+# Ссылка-приглашение в ваш приватный канал или ссылку на ресурс
+ACCESS_LINK = ""
 
-# Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+# Список ID администраторов
+ADMINS = [6646433980]  # ЗАМЕНИТЕ на свои ID!
 
-# Состояния для конечного автомата (FSM)
-class AdminStates(StatesGroup):
-    """Состояния для админ-команд"""
+# --- Состояния для FSM (Finite State Machine) ---
+class BroadcastState(StatesGroup):
     waiting_for_message = State()
-    waiting_for_button_text = State()
-    waiting_for_button_url = State()
 
-# Переменные для хранения данных
-all_users = set()  # Хранилище ID пользователей для рассылки
-button_data = {}  # Хранилище для кнопки
+class ReferralState(StatesGroup):
+    waiting_for_referral_data = State()
 
-# Middleware для проверки на админа
-@dp.message(F.from_user.id.in_(ADMINS))
-@dp.callback_query(F.from_user.id.in_(ADMINS))
-async def admin_only_check(event: types.Message | types.CallbackQuery, next_handler):
-    """Пропускает команды, только если пользователь — админ."""
-    return await next_handler(event)
+# --- Инициализация ---
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
 
-# ----------------- Команды для администратора -----------------
+# --- Вспомогательная функция для работы с БД ---
+def init_db():
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY,
+            title TEXT,
+            url TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-@dp.message(Command("send_message"))
-async def start_broadcast(message: types.Message, state: FSMContext):
-    """Начинает процесс рассылки сообщения."""
-    await message.reply("Отправьте сообщение, которое нужно разослать всем пользователям. Для отмены отправьте /cancel")
-    await state.set_state(AdminStates.waiting_for_message)
+def add_user_to_db(user_id):
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+    conn.commit()
+    conn.close()
 
-@dp.message(AdminStates.waiting_for_message)
-async def process_broadcast_message(message: types.Message, state: FSMContext):
-    """Обрабатывает и рассылает сообщение."""
-    if message.text == "/cancel":
-        await message.reply("Рассылка отменена.")
-        await state.clear()
-        return
-
-    success_count = 0
-    fail_count = 0
-    message_content = message.text
-
-    for user_id in all_users:
+# --- Вспомогательная функция для проверки подписки ---
+async def check_subscription(user_id: int):
+    for channel_id in CHANNELS:
         try:
-            await bot.send_message(user_id, message_content, parse_mode=ParseMode.HTML)
-            success_count += 1
-            await asyncio.sleep(0.05)  # Задержка для предотвращения лимитов Telegram
-        except Exception as e:
-            logging.error(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
-            fail_count += 1
+            member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+            if member.status not in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+                return False
+        except TelegramBadRequest:
+            print(f"Ошибка: Не могу получить информацию о пользователе в канале {channel_id}.")
+            return False
+    return True
 
-    await message.reply(f"Рассылка завершена!\n"
-                        f"Успешно отправлено: {success_count}\n"
-                        f"Не удалось отправить (пользователи заблокировали бота): {fail_count}")
-    await state.clear()
+# --- Обработчик команды /start ---
+@dp.message(commands=["start"])
+async def start_handler(message: types.Message):
+    add_user_to_db(message.from_user.id)
+    is_subscribed = await check_subscription(message.from_user.id)
 
-@dp.message(Command("set_button"))
-async def start_set_button(message: types.Message, state: FSMContext):
-    """Начинает процесс создания кнопки."""
-    await message.reply("Введите текст, который будет на кнопке.")
-    await state.set_state(AdminStates.waiting_for_button_text)
+    if is_subscribed:
+        await message.answer(
+            "Спасибо за подписку! ✅\n\n"
+            f"Вот ваша ссылка для доступа: {ACCESS_LINK}"
+        )
+    else:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT title, url FROM referrals")
+        referrals = cursor.fetchall()
+        conn.close()
+        
+        keyboard_buttons = []
+        if referrals:
+            for title, url in referrals:
+                keyboard_buttons.append([types.InlineKeyboardButton(text=title, url=url)])
 
-@dp.message(AdminStates.waiting_for_button_text)
-async def process_button_text(message: types.Message, state: FSMContext):
-    await state.update_data(text=message.text)
-    await message.reply("Теперь введите URL-адрес для этой кнопки (например, https://t.me/yours).")
-    await state.set_state(AdminStates.waiting_for_button_url)
+        keyboard_buttons.append([types.InlineKeyboardButton(text="Я подписался, проверить", callback_data="check_channels")])
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
-@dp.message(AdminStates.waiting_for_button_url)
-async def process_button_url(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    button_data["text"] = data["text"]
-    button_data["url"] = message.text
-    await message.reply(f"Кнопка '{button_data['text']}' с URL '{button_data['url']}' сохранена.")
-    await state.clear()
+        await message.answer(
+            "Для доступа к закрытому контенту, пожалуйста, подпишитесь на следующие каналы:",
+            reply_markup=keyboard
+        )
 
-# ----------------- Команды для всех пользователей -----------------
-
-@dp.message(CommandStart())
-async def cmd_start(message: types.Message):
-    """Обработчик команды /start для всех пользователей."""
-    user_id = message.from_user.id
-    all_users.add(user_id)
+# --- Обработчик нажатия на кнопку "Я подписался, проверить" ---
+@dp.callback_query(F.data == "check_channels")
+async def check_channels_callback(callback_query: types.CallbackQuery):
+    is_subscribed = await check_subscription(callback_query.from_user.id)
     
-    # Создание кнопки, если она настроена
-    reply_markup = None
-    if button_data:
-        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text=button_data["text"], url=button_data["url"])]
-        ])
-        reply_markup = keyboard
+    if is_subscribed:
+        await callback_query.message.edit_text(
+            "Спасибо за подписку! ✅\n\n"
+            f"Вот ваша ссылка для доступа: {ACCESS_LINK}"
+        )
+    else:
+        await callback_query.answer("Вы ещё не подписались на все каналы. Пожалуйста, подпишитесь и нажмите кнопку снова.", show_alert=True)
 
-    await message.reply(f"Привет, {message.from_user.first_name}! Я готов помочь.\n"
-                        f"Здесь может быть текст, предлагающий подписаться на канал.",
-                        reply_markup=reply_markup)
+# --- Админ-панель ---
+@dp.message(F.from_user.id.in_(ADMINS), commands=["admin_panel"])
+async def admin_panel(message: types.Message):
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text="Создать рассылку", callback_data="broadcast")],
+            [types.InlineKeyboardButton(text="Управление рефералами", callback_data="manage_referrals")]
+        ]
+    )
+    await message.answer("Добро пожаловать в админ-панель!", reply_markup=keyboard)
 
-# ----------------- Проверка подписки по заявке -----------------
-@dp.message(Command("check"))
-async def cmd_check_subscription(message: types.Message):
-    """Проверяет подписку пользователя на канал."""
+# --- Рассылка ---
+@dp.callback_query(F.data == "broadcast")
+@dp.message(F.from_user.id.in_(ADMINS), commands=["broadcast"])
+async def start_broadcast(message: types.Message, state: FSMContext):
+    await message.answer("Отправьте сообщение для рассылки. Рассылка будет отправлена всем пользователям бота.")
+    await state.set_state(BroadcastState.waiting_for_message)
+
+@dp.message(BroadcastState.waiting_for_message, F.from_user.id.in_(ADMINS))
+async def send_broadcast(message: types.Message, state: FSMContext):
+    await state.clear()
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users")
+    users = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    
+    sent_count = 0
+    blocked_count = 0
+    for user_id in users:
+        try:
+            await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+            sent_count += 1
+            await asyncio.sleep(0.05) # Задержка для предотвращения лимитов Telegram
+        except TelegramForbiddenError:
+            blocked_count += 1
+            print(f"Пользователь {user_id} заблокировал бота.")
+        except Exception as e:
+            print(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+    await message.answer(f"Рассылка завершена!\nОтправлено: {sent_count}\nЗаблокировали: {blocked_count}")
+
+# --- Управление рефералами ---
+@dp.callback_query(F.data == "manage_referrals")
+@dp.message(F.from_user.id.in_(ADMINS), commands=["manage_referrals"])
+async def manage_referrals(message: types.Message):
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title, url FROM referrals")
+    referrals = cursor.fetchall()
+    conn.close()
+
+    keyboard_buttons = []
+    if referrals:
+        for ref_id, title, url in referrals:
+            keyboard_buttons.append([types.InlineKeyboardButton(text=f"🗑️ {title}", callback_data=f"del_ref:{ref_id}")])
+    
+    keyboard_buttons.append([types.InlineKeyboardButton(text="➕ Добавить новую рефералку", callback_data="add_referral")])
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
+    await message.answer("<b>Управление реферальными кнопками:</b>\n\nНажмите на кнопку, чтобы удалить ее. Нажмите на ➕, чтобы добавить новую.", reply_markup=keyboard)
+
+@dp.callback_query(F.data.startswith("del_ref:"))
+async def delete_referral(callback_query: types.CallbackQuery):
+    ref_id = int(callback_query.data.split(":")[1])
+    conn = sqlite3.connect('bot_data.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM referrals WHERE id = ?", (ref_id,))
+    conn.commit()
+    conn.close()
+    await callback_query.answer("Рефералка удалена!", show_alert=True)
+    await manage_referrals(callback_query.message)
+
+@dp.callback_query(F.data == "add_referral")
+async def add_referral_start(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.message.answer("Отправьте название и ссылку реферальной кнопки в формате:\n\n<code>Название | ссылка</code>\n\nНапример:\n<code>Канал 1 | https://t.me/channel_1</code>", parse_mode=ParseMode.HTML)
+    await state.set_state(ReferralState.waiting_for_referral_data)
+
+@dp.message(ReferralState.waiting_for_referral_data)
+async def add_referral_data(message: types.Message, state: FSMContext):
+    await state.clear()
     try:
-        chat_member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=message.from_user.id)
-        if chat_member.status in ['member', 'administrator', 'creator']:
-            await message.reply("Спасибо! Ваша подписка на канал подтверждена. Заявка принята.")
-        else:
-            await message.reply("Вы еще не подписались на наш канал. Пожалуйста, сначала подпишитесь, а затем попробуйте снова.")
-    except Exception as e:
-        await message.reply(f"Произошла ошибка при проверке. Пожалуйста, попробуйте позже.")
-        logging.error(f"Ошибка при проверке подписки: {e}")
+        title, url = message.text.split(" | ", 1)
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO referrals (title, url) VALUES (?, ?)", (title, url,))
+        conn.commit()
+        conn.close()
+        await message.answer("✅ Новая реферальная кнопка успешно добавлена!")
+    except ValueError:
+        await message.answer("⚠️ Неверный формат. Попробуйте еще раз в формате: Название | ссылка")
 
-# Запуск бота
+# --- Запуск бота ---
 async def main():
-    try:
-        await dp.start_polling(bot)
-    finally:
-        await bot.session.close()
+    init_db()
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
