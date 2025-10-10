@@ -1,17 +1,20 @@
 import asyncio
+import sqlite3
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ChatMemberStatus, ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-import sqlite3
+from aiogram.client.default import DefaultBotProperties
 
 # --- Настройка ---
 # Вставьте сюда токен вашего бота, полученный от BotFather
 BOT_TOKEN = "8335870133:AAHwcXoy3usOWT4Y9F8cSOPiHwX5OO33hI8" 
 
 # Список ID каналов, на которые нужно проверить подписку
-CHANNELS = [-1002910637134 # ID первого канала
+# ВАЖНО: ID каналов начинаются с '-100'
+CHANNELS = [-1002910637134
+   # Добавьте столько каналов, сколько вам нужно
 ]
 
 # Ссылка-приглашение в ваш приватный канал или ссылку на ресурс
@@ -28,7 +31,8 @@ class ReferralState(StatesGroup):
     waiting_for_referral_data = State()
 
 # --- Инициализация ---
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+# Исправленная строка инициализации Bot
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # --- Вспомогательная функция для работы с БД ---
@@ -88,10 +92,12 @@ async def start_handler(message: types.Message):
         conn.close()
         
         keyboard_buttons = []
+        # Добавляем реферальные кнопки
         if referrals:
             for title, url in referrals:
                 keyboard_buttons.append([types.InlineKeyboardButton(text=title, url=url)])
 
+        # Добавляем кнопку "Проверить подписку"
         keyboard_buttons.append([types.InlineKeyboardButton(text="Я подписался, проверить", callback_data="check_channels")])
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
@@ -126,7 +132,7 @@ async def admin_panel(message: types.Message):
 
 # --- Рассылка ---
 @dp.callback_query(F.data == "broadcast")
-@dp.message(F.from_user.id.in_(ADMINS), commands=["broadcast"])
+@dp.message(F.from_user.id.in_(ADMINS), F.text == "Создать рассылку")
 async def start_broadcast(message: types.Message, state: FSMContext):
     await message.answer("Отправьте сообщение для рассылки. Рассылка будет отправлена всем пользователям бота.")
     await state.set_state(BroadcastState.waiting_for_message)
@@ -146,7 +152,7 @@ async def send_broadcast(message: types.Message, state: FSMContext):
         try:
             await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
             sent_count += 1
-            await asyncio.sleep(0.05) # Задержка для предотвращения лимитов Telegram
+            await asyncio.sleep(0.05)
         except TelegramForbiddenError:
             blocked_count += 1
             print(f"Пользователь {user_id} заблокировал бота.")
@@ -157,7 +163,7 @@ async def send_broadcast(message: types.Message, state: FSMContext):
 
 # --- Управление рефералами ---
 @dp.callback_query(F.data == "manage_referrals")
-@dp.message(F.from_user.id.in_(ADMINS), commands=["manage_referrals"])
+@dp.message(F.from_user.id.in_(ADMINS), F.text == "Управление рефералами")
 async def manage_referrals(message: types.Message):
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
