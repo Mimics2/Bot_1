@@ -10,8 +10,7 @@ BOT_TOKEN = "8335870133:AAElDxFGCpn55PY8of1oSkAOEq8KsYFfdqM"
 # Список ID каналов для проверки подписки
 # ВАЖНО: ID каналов начинаются с '-100'
 CHANNELS = [
-    -1003185824824  # ID второго канала
-    # Добавьте столько каналов, сколько вам нужно
+    -100185824824  # ИСПРАВЛЕННЫЙ ID канала
 ]
 
 # Ссылки-приглашения для каждого канала
@@ -40,7 +39,7 @@ def init_db():
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY K`EY,
             title TEXT,
             url TEXT
         )
