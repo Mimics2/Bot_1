@@ -7,15 +7,22 @@ import time
 # Вставьте сюда токен вашего бота, полученный от BotFather
 BOT_TOKEN = "8335870133:AAElDxFGCpn55PY8of1oSkAOEq8KsYFfdqM" 
 
-# Список ID каналов, на которые нужно проверить подписку
+# Список ID каналов для проверки подписки
 # ВАЖНО: ID каналов начинаются с '-100'
 CHANNELS = [
--1002910637134
+    -1003185824824  # ID второго канала
     # Добавьте столько каналов, сколько вам нужно
 ]
 
+# Ссылки-приглашения для каждого канала
+# ВАЖНО: Должен быть такой же порядок, как в списке CHANNELS
+INVITE_LINKS = [
+    https://t.me/+1FcsEhNqTnAxMWVi   # Ссылка-приглашение для второго канала
+    # Добавьте ссылки для остальных каналов
+]
+
 # Ссылка-приглашение в ваш приватный канал или ссылку на ресурс
-ACCESS_LINK = "https://t.me/+zcKXqleQBABmYzhi"
+ACCESS_LINK = "https://t.me/+AbcDefGhiJkLmNoPqRs"
 
 # Список ID администраторов
 ADMINS = [6646433980]  # ЗАМЕНИТЕ на свои ID!
@@ -83,12 +90,9 @@ def start_handler(message):
         
         keyboard = types.InlineKeyboardMarkup()
         
-        # ДОБАВЛЕНО: Кнопки для каналов, на которые нужно подписаться
-        for i, channel_id in enumerate(CHANNELS):
-            # Внимание: для публичных каналов ссылка t.me/channel_name
-            # Для приватных каналов ссылка t.me/c/ID
-            # Здесь используется t.me/c/ID, так как каналы закрытые
-            keyboard.add(types.InlineKeyboardButton(text=f"Канал {i+1}", url=f"https://t.me/c/{str(abs(channel_id))[4:]}"))
+        # ИСПРАВЛЕНИЕ: Используем INVITE_LINKS для кнопок каналов
+        for i, link in enumerate(INVITE_LINKS):
+            keyboard.add(types.InlineKeyboardButton(text=f"Канал {i+1}", url=link))
         
         # Добавляем реферальные кнопки
         if referrals:
