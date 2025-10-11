@@ -32,6 +32,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
+    # ИСПРАВЛЕНИЕ: Убран лишний символ в PRIMARY KEY
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY
@@ -39,7 +40,7 @@ def init_db():
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
-            id INTEGER PRIMARY K`EY,
+            id INTEGER PRIMARY KEY,
             title TEXT,
             url TEXT
         )
