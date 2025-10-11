@@ -5,7 +5,7 @@ import time
 
 # --- Настройка ---
 # Вставьте сюда токен вашего бота, полученный от BotFather
-BOT_TOKEN = "8335870133:AAElDxFGCpn55PY8of1oSkAOEq8KsYFfdqM" 
+BOT_TOKEN = "8335870133:AAHgXQUR1uQfquOHwVkwEYUbkO9tl9CMkk0" 
 
 # Список ID каналов для проверки подписки
 # ВАЖНО: ID каналов начинаются с '-100'
