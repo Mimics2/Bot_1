@@ -10,20 +10,18 @@ BOT_TOKEN = "8335870133:AAHgXQUR1uQfquOHwVkwEYUbkO9tl9CMkk0"
 # Список ID каналов для проверки подписки
 # ВАЖНО: ID каналов начинаются с '-100'
 CHANNELS = [
-    -100185824824  # ИСПРАВЛЕННЫЙ ID канала
+    -1003185824824  
 ]
 
 # Ссылки-приглашения для каждого канала
 # ВАЖНО: Должен быть такой же порядок, как в списке CHANNELS
-INVITE_LINKS = ["https://t.me/+1FcsEhNqTnAxMWVi"# Ссылка-приглашение для второго канала
-    # Добавьте ссылки для остальных каналов
-]
+INVITE_LINKS = ["https://t.me/+1FcsEhNqTnAxMWVi"]
 
 # Ссылка-приглашение в ваш приватный канал или ссылку на ресурс
 ACCESS_LINK = "https://t.me/+AbcDefGhiJkLmNoPqRs"
 
 # Список ID администраторов
-ADMINS = [6646433980]  # ЗАМЕНИТЕ на свои ID!
+ADMINS = [6646433980]
 
 # --- Инициализация ---
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -32,7 +30,6 @@ bot = telebot.TeleBot(BOT_TOKEN)
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
-    # ИСПРАВЛЕНИЕ: Убран лишний символ в PRIMARY KEY
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY
@@ -114,10 +111,10 @@ def check_channels_callback(call):
     is_subscribed = check_subscription(call.from_user.id)
     
     if is_subscribed:
-        bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            text="Спасибо за подписку! ✅\n\n"
+        # ИСПРАВЛЕНО: Вместо edit_message_text отправляем новое сообщение
+        bot.send_message(
+            call.message.chat.id,
+            "Спасибо за подписку! ✅\n\n"
             f"Вот ваша ссылка для доступа: {ACCESS_LINK}",
             parse_mode='HTML'
         )
