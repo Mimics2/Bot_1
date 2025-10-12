@@ -52,19 +52,14 @@ def check_subscription(user_id):
     cursor.execute("SELECT channel_id FROM channels")
     channels = [row[0] for row in cursor.fetchall()]
     conn.close()
-    
-    # Если в базе данных нет каналов, возвращаем True, чтобы не блокировать доступ
-    if not channels:
-        return True
 
     for channel_id in channels:
         try:
             member = bot.get_chat_member(chat_id=channel_id, user_id=user_id)
             if member.status not in ['member', 'administrator', 'creator']:
-                print(f"Пользователь {user_id} не является участником канала {channel_id}.")
                 return False
         except Exception as e:
-            print(f"Ошибка при проверке подписки для пользователя {user_id} в канале {channel_id}: {e}")
+            print(f"Ошибка при проверке подписки: {e}")
             return False
     return True
 
