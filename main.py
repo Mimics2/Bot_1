@@ -5,7 +5,7 @@ import time
 
 # --- Настройка ---
 # Вставьте сюда токен вашего бота, полученный от BotFather
-BOT_TOKEN = "7557745613:AAHdeHM2zEmXJqZ774GsJlqzTaI60RdybG0" 
+BOT_TOKEN = "7557745613:AAFTpWsCJ2bZMqD6GDwTynnqA8Nc-mRF1Rs" 
 
 # Список ID администраторов
 ADMINS = [6646433980]
