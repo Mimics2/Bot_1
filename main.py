@@ -18,7 +18,7 @@ CHANNELS = [
 INVITE_LINKS = ["https://t.me/+1FcsEhNqTnAxMWVi"]
 
 # Ссылка-приглашение в ваш приватный канал или ссылку на ресурс
-ACCESS_LINK = "https://t.me/+AbcDefGhiJkLmNoPqRs"
+ACCESS_LINK = "https://t.me/+bi4dS24yYwc3ZThi"
 
 # Список ID администраторов
 ADMINS = [6646433980]
