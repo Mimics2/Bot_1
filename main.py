@@ -63,6 +63,14 @@ def check_subscription(user_id):
             return False
     return True
 
+# --- Команда /menu ---
+@bot.message_handler(commands=['menu'])
+def show_menu(message):
+    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    keyboard.add(types.KeyboardButton(text="/admin_panel"))
+    keyboard.add(types.KeyboardButton(text="/start"))
+    bot.send_message(message.chat.id, "Выберите опцию:", reply_markup=keyboard)
+
 # --- Обработчик команды /start ---
 @bot.message_handler(commands=['start'])
 def start_handler(message):
