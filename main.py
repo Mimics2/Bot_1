@@ -267,7 +267,7 @@ def delete_referral(call):
 def add_referral_start(call):
     bot.send_message(
         call.message.chat.id,
-        "Отправьте название и ссылку реферальной кнопки в формате:\n\n<code>Название | ссылка</code>\n\nНапример:\n<code>Канал 1 | https://t.me/channel_1</code>",
+        "Отправьте название и ссылку реферальной кнопки в формате:\\n\\n<code>Название | ссылка</code>\\n\\nНапример:\\n<code>Канал 1 | https://t.me/channel_1</code>",
         parse_mode='HTML'
     )
     bot.register_next_step_handler(call.message, add_referral_data)
