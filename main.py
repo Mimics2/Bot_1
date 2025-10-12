@@ -28,6 +28,13 @@ def init_db():
             invite_link TEXT
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY,
+            title TEXT,
+            url TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -46,11 +53,13 @@ def check_subscription(user_id):
     channels = [row[0] for row in cursor.fetchall()]
     conn.close()
     
+    # Если в базе данных нет каналов, возвращаем True, чтобы не блокировать доступ
     if not channels:
         return True
 
     for channel_id in channels:
         try:
+            # ИСПРАВЛЕНИЕ: Принудительное преобразование ID канала в число
             member = bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
             if member.status not in ['member', 'administrator', 'creator']:
                 print(f"Пользователь {user_id} не является участником канала {channel_id}.")
@@ -78,6 +87,8 @@ def start_handler(message):
         cursor = conn.cursor()
         cursor.execute("SELECT invite_link FROM channels")
         invite_links = [row[0] for row in cursor.fetchall()]
+        cursor.execute("SELECT title, url FROM referrals")
+        referrals = cursor.fetchall()
         conn.close()
         
         keyboard = types.InlineKeyboardMarkup()
@@ -85,6 +96,10 @@ def start_handler(message):
         for i, link in enumerate(invite_links):
             keyboard.add(types.InlineKeyboardButton(text=f"Канал {i+1}", url=link))
         
+        if referrals:
+            for title, url in referrals:
+                keyboard.add(types.InlineKeyboardButton(text=title, url=url))
+
         keyboard.add(types.InlineKeyboardButton(text="Я подписался, проверить", callback_data="check_channels"))
 
         bot.send_message(
@@ -109,39 +124,26 @@ def check_channels_callback(call):
     else:
         bot.answer_callback_query(call.id, "Вы ещё не подписались на все каналы. Пожалуйста, подпишитесь и нажмите кнопку снова.", show_alert=True)
 
+# --- Админ-панель ---
+@bot.message_handler(commands=['admin_panel'], func=lambda message: message.from_user.id in ADMINS)
+def admin_panel(message):
+    keyboard = types.InlineKeyboardMarkup()
+    keyboard.add(types.InlineKeyboardButton(text="Список каналов", callback_data="channels_list"))
+    keyboard.add(types.InlineKeyboardButton(text="Добавить канал", callback_data="add_channel"))
+    keyboard.add(types.InlineKeyboardButton(text="Удалить канал", callback_data="delete_channel"))
+    keyboard.add(types.InlineKeyboardButton(text="Создать рассылку", callback_data="broadcast"))
+    keyboard.add(types.InlineKeyboardButton(text="Управление рефералами", callback_data="manage_referrals"))
+
+    bot.send_message(
+        message.chat.id,
+        "Добро пожаловать в админ-панель!",
+        reply_markup=keyboard,
+        parse_mode='HTML'
+    )
+
 # --- Управление каналами ---
-@bot.message_handler(commands=['add_channel'], func=lambda message: message.from_user.id in ADMINS)
-def add_channel_command(message):
-    try:
-        command, channel_id, invite_link = message.text.split(" ", 2)
-        conn = sqlite3.connect('bot_data.db')
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO channels (channel_id, invite_link) VALUES (?, ?)", (channel_id, invite_link,))
-        conn.commit()
-        conn.close()
-        bot.send_message(message.chat.id, f"✅ Канал {channel_id} успешно добавлен!")
-    except ValueError:
-        bot.send_message(message.chat.id, "⚠️ Неверный формат. Используйте: <code>/add_channel -100... https://t.me/+...</code>", parse_mode='HTML')
-    except Exception as e:
-        bot.send_message(message.chat.id, f"⚠️ Произошла ошибка: {e}")
-
-@bot.message_handler(commands=['delete_channel'], func=lambda message: message.from_user.id in ADMINS)
-def delete_channel_command(message):
-    try:
-        command, channel_id = message.text.split(" ", 1)
-        conn = sqlite3.connect('bot_data.db')
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
-        conn.commit()
-        conn.close()
-        bot.send_message(message.chat.id, f"✅ Канал {channel_id} успешно удален!")
-    except ValueError:
-        bot.send_message(message.chat.id, "⚠️ Неверный формат. Используйте: <code>/delete_channel -100...</code>", parse_mode='HTML')
-    except Exception as e:
-        bot.send_message(message.chat.id, f"⚠️ Произошла ошибка: {e}")
-
-@bot.message_handler(commands=['channels_list'], func=lambda message: message.from_user.id in ADMINS)
-def channels_list_command(message):
+@bot.callback_query_handler(func=lambda call: call.data == "channels_list")
+def channels_list(call):
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
     cursor.execute("SELECT channel_id, invite_link FROM channels")
@@ -149,16 +151,51 @@ def channels_list_command(message):
     conn.close()
 
     if not channels:
-        bot.send_message(message.chat.id, "Список каналов пуст.")
+        bot.send_message(call.message.chat.id, "Список каналов пуст.")
         return
 
     text = "<b>Список обязательных каналов:</b>\n\n"
     for i, (channel_id, invite_link) in enumerate(channels):
         text += f"{i+1}. ID: <code>{channel_id}</code>\n   Ссылка: {invite_link}\n\n"
     
-    bot.send_message(message.chat.id, text, parse_mode='HTML')
+    bot.send_message(call.message.chat.id, text, parse_mode='HTML')
+
+@bot.callback_query_handler(func=lambda call: call.data == "add_channel")
+def add_channel_start(call):
+    bot.send_message(call.message.chat.id, "Отправьте ID канала и ссылку-приглашение в формате:\n\n<code>-100... | https://t.me/+...</code>", parse_mode='HTML')
+    bot.register_next_step_handler(call.message, add_channel_data)
+
+def add_channel_data(message):
+    try:
+        channel_id, invite_link = message.text.split(" | ", 1)
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO channels (channel_id, invite_link) VALUES (?, ?)", (channel_id, invite_link,))
+        conn.commit()
+        conn.close()
+        bot.send_message(message.chat.id, "✅ Канал успешно добавлен!")
+    except ValueError:
+        bot.send_message(message.chat.id, "⚠️ Неверный формат. Попробуйте еще раз в формате: -100... | https://t.me/+...")
+
+@bot.callback_query_handler(func=lambda call: call.data == "delete_channel")
+def delete_channel_start(call):
+    bot.send_message(call.message.chat.id, "Отправьте ID канала, который хотите удалить:")
+    bot.register_next_step_handler(call.message, delete_channel_data)
+
+def delete_channel_data(message):
+    try:
+        channel_id = message.text
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
+        conn.commit()
+        conn.close()
+        bot.send_message(message.chat.id, "✅ Канал успешно удален!")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"⚠️ Произошла ошибка при удалении канала: {e}")
 
 # --- Рассылка ---
+@bot.callback_query_handler(func=lambda call: call.data == "broadcast")
 @bot.message_handler(commands=['broadcast'], func=lambda message: message.from_user.id in ADMINS)
 def start_broadcast(message):
     bot.send_message(message.chat.id, "Отправьте сообщение для рассылки. Рассылка будет отправлена всем пользователям бота.")
@@ -190,6 +227,7 @@ def send_broadcast(message):
     bot.send_message(message.chat.id, f"Рассылка завершена!\nОтправлено: {sent_count}\nЗаблокировали: {blocked_count}")
 
 # --- Управление рефералами ---
+@bot.callback_query_handler(func=lambda call: call.data == "manage_referrals")
 @bot.message_handler(commands=['manage_referrals'], func=lambda message: message.from_user.id in ADMINS)
 def manage_referrals(message):
     conn = sqlite3.connect('bot_data.db')
