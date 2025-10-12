@@ -53,11 +53,13 @@ def check_subscription(user_id):
     channels = [row[0] for row in cursor.fetchall()]
     conn.close()
     
+    # Если в базе данных нет каналов, возвращаем True, чтобы не блокировать доступ
     if not channels:
         return True
 
     for channel_id in channels:
         try:
+            # ИСПРАВЛЕНИЕ: Принудительное преобразование ID канала в число
             member = bot.get_chat_member(chat_id=int(channel_id), user_id=user_id)
             if member.status not in ['member', 'administrator', 'creator']:
                 print(f"Пользователь {user_id} не является участником канала {channel_id}.")
@@ -66,6 +68,14 @@ def check_subscription(user_id):
             print(f"Ошибка при проверке подписки для пользователя {user_id} в канале {channel_id}: {e}")
             return False
     return True
+
+# --- Команда /menu ---
+@bot.message_handler(commands=['menu'])
+def show_menu(message):
+    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    keyboard.add(types.KeyboardButton(text="/admin_panel"))
+    keyboard.add(types.KeyboardButton(text="/start"))
+    bot.send_message(message.chat.id, "Выберите опцию:", reply_markup=keyboard)
 
 # --- Обработчик команды /start ---
 @bot.message_handler(commands=['start'])
