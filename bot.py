@@ -8,10 +8,10 @@ from telegram import (
     BotCommand
 )
 from telegram.ext import (
-    Updater,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
-    CallbackContext
+    ContextTypes
 )
 
 # Настройки
@@ -152,9 +152,9 @@ except Exception as e:
     # Создаем заглушку чтобы бот мог запуститься
     db = None
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db is None:
-        update.message.reply_text("❌ Бот временно недоступен. Попробуйте позже.")
+        await update.message.reply_text("❌ Бот временно недоступен. Попробуйте позже.")
         return
         
     user = update.effective_user
@@ -176,19 +176,19 @@ def start(update: Update, context: CallbackContext):
     )
 
     # Проверка подписки
-    if check_subscriptions(update, context):
-        show_main_menu(update, context)
+    if await check_subscriptions(update, context):
+        await show_main_menu(update, context)
     else:
-        show_subscription_request(update, context)
+        await show_subscription_request(update, context)
 
-def check_subscriptions(update: Update, context: CallbackContext):
+async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bot = context.bot
     
     all_subscribed = True
     for channel in CHANNELS:
         try:
-            chat_member = bot.get_chat_member(
+            chat_member = await bot.get_chat_member(
                 chat_id=f"@{channel['username']}",
                 user_id=user.id
             )
@@ -203,7 +203,7 @@ def check_subscriptions(update: Update, context: CallbackContext):
     
     return all_subscribed
 
-def show_subscription_request(update: Update, context: CallbackContext):
+async def show_subscription_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     
     for channel in CHANNELS:
@@ -221,18 +221,18 @@ def show_subscription_request(update: Update, context: CallbackContext):
     text = "📋 Для доступа к боту необходимо подписаться на наши каналы:"
     
     if update.callback_query:
-        update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
     else:
-        update.message.reply_text(text, reply_markup=reply_markup)
+        await update.message.reply_text(text, reply_markup=reply_markup)
 
-def show_main_menu(update: Update, context: CallbackContext):
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     text = f"""
 🎉 Добро пожаловать, {user.first_name}!
 
 📊 Ваша реферальная ссылка:
-`https://t.me/{context.bot.username}?start={user.id}`
+`https://t.me/{(await context.bot.get_me()).username}?start={user.id}`
 
 Выберите действие:
     """
@@ -249,38 +249,38 @@ def show_main_menu(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     if update.callback_query:
-        update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     else:
-        update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-def button_handler(update: Update, context: CallbackContext):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
     if query.data == "check_subs":
-        if check_subscriptions(update, context):
-            show_main_menu(update, context)
+        if await check_subscriptions(update, context):
+            await show_main_menu(update, context)
         else:
-            show_subscription_request(update, context)
+            await show_subscription_request(update, context)
     
     elif query.data == "get_ref":
         user = update.effective_user
-        ref_link = f"https://t.me/{context.bot.username}?start={user.id}"
-        query.edit_message_text(
+        ref_link = f"https://t.me/{(await context.bot.get_me()).username}?start={user.id}"
+        await query.edit_message_text(
             f"🔗 Ваша реферальная ссылка:\n`{ref_link}`\n\nПоделитесь этой ссылкой с друзьями!",
             parse_mode='Markdown'
         )
     
     elif query.data == "stats":
-        query.edit_message_text("📊 Статистика в разработке...")
+        await query.edit_message_text("📊 Статистика в разработке...")
     
     elif query.data == "admin_panel":
         if update.effective_user.id == ADMIN_ID:
-            show_admin_panel(update, context)
+            await show_admin_panel(update, context)
 
-def show_admin_panel(update: Update, context: CallbackContext):
+async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db is None:
-        update.callback_query.edit_message_text("❌ База данных недоступна")
+        await update.callback_query.edit_message_text("❌ База данных недоступна")
         return
         
     total_users = len(db.get_all_users())
@@ -301,39 +301,37 @@ def show_admin_panel(update: Update, context: CallbackContext):
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
 
-def set_commands(updater):
+async def set_commands(application: Application):
     commands = [
         BotCommand("start", "Запустить бота"),
         BotCommand("stats", "Статистика"),
         BotCommand("referral", "Реферальная ссылка")
     ]
-    updater.bot.set_my_commands(commands)
+    await application.bot.set_my_commands(commands)
 
 def main():
     if db is None:
         logger.error("Не удалось инициализировать базу данных. Бот не может быть запущен.")
         return
         
-    updater = Updater(token=BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+    application = Application.builder().token(BOT_TOKEN).build()
     
     # Обработчики команд
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("stats", show_main_menu))
-    dispatcher.add_handler(CommandHandler("referral", show_main_menu))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("stats", show_main_menu))
+    application.add_handler(CommandHandler("referral", show_main_menu))
     
     # Обработчики кнопок
-    dispatcher.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(button_handler))
     
     # Установка команд бота
-    set_commands(updater)
+    application.post_init = set_commands
     
     # Запуск бота
     logger.info("Бот запускается...")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
