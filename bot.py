@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import os
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -14,9 +15,11 @@ from telegram.ext import (
 )
 
 # Настройки
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-ADMIN_ID = 123456789  # Ваш ID в Telegram
-DB_PATH = "/data/bot.db"  # Путь к базе данных (на Railway используйте /data)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Ваш ID в Telegram
+
+# Используем относительный путь для Railway
+DB_PATH = os.path.join(os.path.dirname(__file__), "bot.db")
 
 # Список каналов для проверки (username без @)
 CHANNELS = [
@@ -29,84 +32,131 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self, db_path):
         self.db_path = db_path
+        logger.info(f"Инициализация базы данных по пути: {db_path}")
         self.init_db()
 
     def init_db(self):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Таблица пользователей
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
-                username TEXT,
-                full_name TEXT,
-                referrer_id INTEGER,
-                joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица подписок
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS subscriptions (
-                user_id INTEGER,
-                channel_username TEXT,
-                subscribed BOOLEAN DEFAULT FALSE,
-                last_check TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (user_id, channel_username)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        try:
+            # Создаем директорию если нужно
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Таблица пользователей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    full_name TEXT,
+                    referrer_id INTEGER,
+                    joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица подписок
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    user_id INTEGER,
+                    channel_username TEXT,
+                    subscribed BOOLEAN DEFAULT FALSE,
+                    last_check TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, channel_username)
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            logger.info("База данных успешно инициализирована")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации базы данных: {e}")
+            raise
 
     def add_user(self, user_id, username, full_name, referrer_id=None):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO users (user_id, username, full_name, referrer_id)
-            VALUES (?, ?, ?, ?)
-        ''', (user_id, username, full_name, referrer_id))
-        conn.commit()
-        conn.close()
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO users (user_id, username, full_name, referrer_id)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, username, full_name, referrer_id))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Ошибка добавления пользователя: {e}")
 
     def get_user(self, user_id):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-        user = cursor.fetchone()
-        conn.close()
-        return user
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+            user = cursor.fetchone()
+            conn.close()
+            return user
+        except Exception as e:
+            logger.error(f"Ошибка получения пользователя: {e}")
+            return None
 
     def update_subscription(self, user_id, channel_username, subscribed):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO subscriptions (user_id, channel_username, subscribed, last_check)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (user_id, channel_username, subscribed))
-        conn.commit()
-        conn.close()
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO subscriptions (user_id, channel_username, subscribed, last_check)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (user_id, channel_username, subscribed))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Ошибка обновления подписки: {e}")
 
     def get_subscription_status(self, user_id, channel_username):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT subscribed FROM subscriptions 
-            WHERE user_id = ? AND channel_username = ?
-        ''', (user_id, channel_username))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else False
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT subscribed FROM subscriptions 
+                WHERE user_id = ? AND channel_username = ?
+            ''', (user_id, channel_username))
+            result = cursor.fetchone()
+            conn.close()
+            return result[0] if result else False
+        except Exception as e:
+            logger.error(f"Ошибка получения статуса подписки: {e}")
+            return False
+
+    def get_all_users(self):
+        """Получить всех пользователей (для админа)"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT user_id FROM users')
+            users = cursor.fetchall()
+            conn.close()
+            return users
+        except Exception as e:
+            logger.error(f"Ошибка получения всех пользователей: {e}")
+            return []
 
 # Инициализация базы данных
-db = Database(DB_PATH)
+try:
+    db = Database(DB_PATH)
+    logger.info("База данных успешно загружена")
+except Exception as e:
+    logger.error(f"Критическая ошибка инициализации БД: {e}")
+    # Создаем заглушку чтобы бот мог запуститься
+    db = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if db is None:
+        await update.message.reply_text("❌ Бот временно недоступен. Попробуйте позже.")
+        return
+        
     user = update.effective_user
     referrer_id = None
     
@@ -148,7 +198,7 @@ async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE
             if not subscribed:
                 all_subscribed = False
         except Exception as e:
-            logging.error(f"Ошибка проверки подписки: {e}")
+            logging.error(f"Ошибка проверки подписки на {channel['username']}: {e}")
             all_subscribed = False
     
     return all_subscribed
@@ -177,15 +227,12 @@ async def show_subscription_request(update: Update, context: ContextTypes.DEFAUL
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    referrer_count = 0  # Здесь можно добавить подсчет рефералов
     
     text = f"""
 🎉 Добро пожаловать, {user.first_name}!
 
 📊 Ваша реферальная ссылка:
 `https://t.me/{(await context.bot.get_me()).username}?start={user.id}`
-
-👥 Приглашено пользователей: {referrer_count}
 
 Выберите действие:
     """
@@ -225,7 +272,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif query.data == "stats":
-        # Здесь можно добавить статистику
         await query.edit_message_text("📊 Статистика в разработке...")
     
     elif query.data == "admin_panel":
@@ -233,15 +279,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_admin_panel(update, context)
 
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Статистика для админа
-    total_users = len([db.get_user(user_id) for user_id in set([u[0] for u in db.get_all_users()])])
+    if db is None:
+        await update.callback_query.edit_message_text("❌ База данных недоступна")
+        return
+        
+    total_users = len(db.get_all_users())
     
     text = f"""
 👑 Админ-панель
 
 📊 Общая статистика:
 👥 Всего пользователей: {total_users}
-📈 Активных подписок: {total_users}  # Здесь нужно добавить реальную логику
 
 Доступные действия:
     """
@@ -264,6 +312,10 @@ async def set_commands(application: Application):
     await application.bot.set_my_commands(commands)
 
 def main():
+    if db is None:
+        logger.error("Не удалось инициализировать базу данных. Бот не может быть запущен.")
+        return
+        
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Обработчики команд
@@ -278,6 +330,7 @@ def main():
     application.post_init = set_commands
     
     # Запуск бота
+    logger.info("Бот запускается...")
     application.run_polling()
 
 if __name__ == "__main__":
