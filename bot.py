@@ -54,19 +54,30 @@ class Database:
                 )
             ''')
             
-            # Таблица каналов для проверки подписки (и публичные, и приватные)
+            # Таблица каналов для проверки подписки
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS subscription_channels (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     channel_username TEXT,
                     channel_url TEXT,
                     channel_name TEXT,
-                    channel_type TEXT DEFAULT 'public', -- 'public' или 'private'
+                    channel_type TEXT DEFAULT 'public',
                     added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
-            # Таблица каналов с рефералками (каналы для выдачи после проверки)
+            # Таблица подтвержденных подписок (для приватных каналов)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS confirmed_subscriptions (
+                    user_id INTEGER,
+                    channel_id INTEGER,
+                    confirmed BOOLEAN DEFAULT FALSE,
+                    confirmed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, channel_id)
+                )
+            ''')
+            
+            # Таблица каналов для выдачи после проверки
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS referral_channels (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,19 +107,7 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка добавления пользователя: {e}")
 
-    def get_user(self, user_id):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-            user = cursor.fetchone()
-            conn.close()
-            return user
-        except Exception as e:
-            logger.error(f"Ошибка получения пользователя: {e}")
-            return None
-
-    # Методы для каналов подписки (публичные и приватные)
+    # Методы для каналов подписки
     def add_subscription_channel(self, channel_username, channel_url, channel_name, channel_type='public'):
         try:
             conn = sqlite3.connect(self.db_path)
@@ -130,6 +129,7 @@ class Database:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute('DELETE FROM subscription_channels WHERE id = ?', (channel_id,))
+            cursor.execute('DELETE FROM confirmed_subscriptions WHERE channel_id = ?', (channel_id,))
             conn.commit()
             conn.close()
             return True
@@ -149,7 +149,38 @@ class Database:
             logger.error(f"Ошибка получения каналов для подписки: {e}")
             return []
 
-    # Методы для каналов с рефералками (каналы для выдачи после проверки)
+    # Методы для подтверждения подписок
+    def confirm_subscription(self, user_id, channel_id):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO confirmed_subscriptions (user_id, channel_id, confirmed)
+                VALUES (?, ?, TRUE)
+            ''', (user_id, channel_id))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка подтверждения подписки: {e}")
+            return False
+
+    def is_subscription_confirmed(self, user_id, channel_id):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT confirmed FROM confirmed_subscriptions 
+                WHERE user_id = ? AND channel_id = ?
+            ''', (user_id, channel_id))
+            result = cursor.fetchone()
+            conn.close()
+            return result[0] if result else False
+        except Exception as e:
+            logger.error(f"Ошибка проверки подтверждения подписки: {e}")
+            return False
+
+    # Методы для каналов с рефералками
     def add_referral_channel(self, channel_url, channel_name):
         try:
             conn = sqlite3.connect(self.db_path)
@@ -232,6 +263,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await show_subscription_request(update, context, subscription_status["missing_channels"])
 
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /admin для быстрого доступа к панели управления"""
+    user = update.effective_user
+    
+    if user.id != ADMIN_ID:
+        await update.message.reply_text("🚫 У вас нет доступа к этой команде")
+        return
+        
+    await show_admin_panel(update, context)
+
 async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     bot = context.bot
@@ -252,7 +293,6 @@ async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE
         if channel_type == 'public':
             # Проверка подписки на публичные каналы
             try:
-                # Убираем @ если есть
                 clean_username = channel_username.lstrip('@')
                 
                 chat_member = await bot.get_chat_member(
@@ -264,6 +304,7 @@ async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if not subscribed:
                     result["all_subscribed"] = False
                     result["missing_channels"].append({
+                        "id": channel_id,
                         "name": channel_name,
                         "type": "public",
                         "url": f"https://t.me/{clean_username}"
@@ -273,20 +314,23 @@ async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE
                 logger.error(f"Ошибка проверки подписки на {channel_username}: {e}")
                 result["all_subscribed"] = False
                 result["missing_channels"].append({
+                    "id": channel_id,
                     "name": channel_name,
                     "type": "public",
                     "url": f"https://t.me/{clean_username}"
                 })
         
         elif channel_type == 'private':
-            # Для приватных каналов мы не можем проверить подписку автоматически
-            # Считаем, что пользователь не подписан (нужно будет вручную подтвердить)
-            result["all_subscribed"] = False
-            result["missing_channels"].append({
-                "name": channel_name,
-                "type": "private",
-                "url": channel_url
-            })
+            # Для приватных каналов проверяем подтверждение
+            confirmed = db.is_subscription_confirmed(user.id, channel_id)
+            if not confirmed:
+                result["all_subscribed"] = False
+                result["missing_channels"].append({
+                    "id": channel_id,
+                    "name": channel_name,
+                    "type": "private",
+                    "url": channel_url
+                })
     
     return result
 
@@ -333,7 +377,6 @@ async def show_subscription_request(update: Update, context: ContextTypes.DEFAUL
     channels = db.get_subscription_channels()
     
     if not channels:
-        # Если нет каналов для подписки, сразу показываем успешное сообщение
         await show_success_message(update, context)
         return
     
@@ -353,10 +396,14 @@ async def show_subscription_request(update: Update, context: ContextTypes.DEFAUL
                 InlineKeyboardButton(
                     f"🔗 Перейти в {channel_info['name']}",
                     url=channel_info["url"]
+                ),
+                InlineKeyboardButton(
+                    f"✅ Подтвердить {channel_info['name']}",
+                    callback_data=f"confirm_{channel_info['id']}"
                 )
             ])
     
-    keyboard.append([InlineKeyboardButton("✅ Я подписался", callback_data="check_subs")])
+    keyboard.append([InlineKeyboardButton("🔄 Проверить все подписки", callback_data="check_subs")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -371,6 +418,7 @@ async def show_subscription_request(update: Update, context: ContextTypes.DEFAUL
         
         if private_channels:
             text += f"• Присоединиться к каналам: **{', '.join(private_channels)}**\n"
+            text += "  *(после вступления нажмите кнопку 'Подтвердить')*\n"
         
         text += "\n👇 Нажмите на кнопки ниже"
     else:
@@ -388,13 +436,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if query.data == "check_subs":
-        # Обновляем статус пользователя в базе
-        db.add_user(
-            user_id=user.id,
-            username=user.username,
-            full_name=user.full_name
-        )
-        
+        db.add_user(user_id=user.id, username=user.username, full_name=user.full_name)
         subscription_status = await check_subscriptions(update, context)
         
         if subscription_status["all_subscribed"]:
@@ -402,17 +444,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await show_subscription_request(update, context, subscription_status["missing_channels"])
     
+    elif query.data.startswith("confirm_"):
+        # Обработка подтверждения подписки на приватный канал
+        channel_id = int(query.data.replace("confirm_", ""))
+        
+        # Подтверждаем подписку
+        if db.confirm_subscription(user.id, channel_id):
+            await query.answer("✅ Подписка подтверждена!", show_alert=True)
+            
+            # Проверяем все подписки снова
+            subscription_status = await check_subscriptions(update, context)
+            
+            if subscription_status["all_subscribed"]:
+                await show_success_message(update, context)
+            else:
+                await show_subscription_request(update, context, subscription_status["missing_channels"])
+        else:
+            await query.answer("❌ Ошибка подтверждения", show_alert=True)
+    
     elif query.data == "admin_panel":
         if update.effective_user.id == ADMIN_ID:
             await show_admin_panel(update, context)
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "manage_subscription_channels":
         if update.effective_user.id == ADMIN_ID:
             await show_manage_subscription_channels(update, context)
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "manage_referral_channels":
         if update.effective_user.id == ADMIN_ID:
             await show_manage_referral_channels(update, context)
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "add_public_channel":
         if update.effective_user.id == ADMIN_ID:
@@ -426,6 +492,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "`@my_channel Мой канал`",
                 parse_mode='Markdown'
             )
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "add_private_channel":
         if update.effective_user.id == ADMIN_ID:
@@ -439,6 +507,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "`https://t.me/my_channel Мой канал`",
                 parse_mode='Markdown'
             )
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "add_referral_channel":
         if update.effective_user.id == ADMIN_ID:
@@ -452,6 +522,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "`https://t.me/final_channel Основной канал`",
                 parse_mode='Markdown'
             )
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data.startswith("delete_subscription_channel_"):
         if update.effective_user.id == ADMIN_ID:
@@ -468,6 +540,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.edit_message_text("❌ Ошибка при удалении!")
             await show_manage_subscription_channels(update, context)
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data.startswith("delete_referral_channel_"):
         if update.effective_user.id == ADMIN_ID:
@@ -484,17 +558,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.edit_message_text("❌ Ошибка при удалении!")
             await show_manage_referral_channels(update, context)
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "back_to_admin":
         if update.effective_user.id == ADMIN_ID:
             await show_admin_panel(update, context)
+        else:
+            await query.answer("🚫 У вас нет доступа", show_alert=True)
 
     elif query.data == "back_to_main":
         await show_success_message(update, context)
 
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db is None:
-        await update.callback_query.edit_message_text("❌ База данных недоступна")
+        if update.callback_query:
+            await update.callback_query.edit_message_text("❌ База данных недоступна")
+        else:
+            await update.message.reply_text("❌ База данных недоступна")
         return
         
     total_users = len(db.get_all_users())
@@ -550,7 +631,6 @@ async def show_manage_subscription_channels(update: Update, context: ContextType
         [InlineKeyboardButton("➕ Канал по ссылке", callback_data="add_private_channel")]
     ]
     
-    # Кнопки удаления для каждого канала
     for channel in channels:
         channel_id, channel_username, channel_url, channel_name, channel_type, _ = channel
         keyboard.append([
@@ -581,7 +661,6 @@ async def show_manage_referral_channels(update: Update, context: ContextTypes.DE
         [InlineKeyboardButton("➕ Добавить финальный канал", callback_data="add_referral_channel")]
     ]
     
-    # Кнопки удаления для каждого канала
     for channel in channels:
         keyboard.append([
             InlineKeyboardButton(f"🗑️ Удалить {channel[2]}", callback_data=f"delete_referral_channel_{channel[0]}")
@@ -607,7 +686,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = update.message.text.strip()
             
             if channel_type == 'public':
-                # Формат для публичных каналов: @username Название
                 if text.startswith('@'):
                     parts = text.split(' ', 1)
                     if len(parts) == 2:
@@ -627,13 +705,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await show_manage_subscription_channels(update, context)
                 
             elif channel_type == 'private':
-                # Формат для каналов по ссылке: ссылка Название
                 parts = text.split(' ', 1)
                 if len(parts) == 2:
                     channel_url = parts[0]
                     channel_name = parts[1]
                     
-                    # Проверяем, что ссылка валидная
                     if channel_url.startswith('http://') or channel_url.startswith('https://') or channel_url.startswith('t.me/'):
                         if db.add_subscription_channel(None, channel_url, channel_name, 'private'):
                             await update.message.reply_text(f"✅ Канал {channel_name} добавлен!")
@@ -648,13 +724,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await show_manage_subscription_channels(update, context)
                 
             elif channel_type == 'referral':
-                # Формат для финальных каналов: ссылка Название
                 parts = text.split(' ', 1)
                 if len(parts) == 2:
                     channel_url = parts[0]
                     channel_name = parts[1]
                     
-                    # Проверяем, что ссылка валидная
                     if channel_url.startswith('http://') or channel_url.startswith('https://') or channel_url.startswith('t.me/'):
                         if db.add_referral_channel(channel_url, channel_name):
                             await update.message.reply_text(f"✅ Финальный канал {channel_name} добавлен!")
@@ -685,7 +759,8 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def set_commands(application: Application):
     commands = [
         BotCommand("start", "Запустить бота"),
-        BotCommand("check", "Проверить подписку")
+        BotCommand("check", "Проверить подписку"),
+        BotCommand("admin", "Панель управления")
     ]
     await application.bot.set_my_commands(commands)
 
@@ -699,6 +774,7 @@ def main():
     # Обработчики команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("check", check_command))
+    application.add_handler(CommandHandler("admin", admin_command))
     
     # Обработчики кнопок
     application.add_handler(CallbackQueryHandler(button_handler))
