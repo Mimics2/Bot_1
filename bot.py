@@ -50,8 +50,7 @@ class Database:
                     user_id INTEGER PRIMARY KEY,
                     username TEXT,
                     full_name TEXT,
-                    joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    referral_shown BOOLEAN DEFAULT FALSE
+                    joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
@@ -118,30 +117,6 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка получения пользователя: {e}")
             return None
-
-    def set_referral_shown(self, user_id):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE users SET referral_shown = TRUE WHERE user_id = ?
-            ''', (user_id,))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.error(f"Ошибка обновления статуса рефералки: {e}")
-
-    def has_referral_been_shown(self, user_id):
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('SELECT referral_shown FROM users WHERE user_id = ?', (user_id,))
-            result = cursor.fetchone()
-            conn.close()
-            return result[0] if result else False
-        except Exception as e:
-            logger.error(f"Ошибка проверки статуса рефералки: {e}")
-            return False
 
     # Методы для каналов подписки (публичные)
     def add_subscription_channel(self, channel_username, channel_name):
@@ -275,7 +250,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка подписки на публичные каналы
     if await check_subscriptions(update, context):
         await show_referral_message(update, context)
-        await show_main_menu(update, context)
     else:
         await show_subscription_request(update, context)
 
@@ -313,47 +287,42 @@ async def check_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE
     return all_subscribed
 
 async def show_referral_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
+    referral_channels = db.get_referral_channels()
     
-    # Проверяем, показывали ли уже рефералку этому пользователю
-    if not db.has_referral_been_shown(user.id):
-        referral_channels = db.get_referral_channels()
-        
-        if not referral_channels:
-            if update.callback_query:
-                await update.callback_query.message.reply_text("✅ Вы подписаны на все каналы!")
-            else:
-                await update.message.reply_text("✅ Вы подписаны на все каналы!")
-            return
-        
-        text = """
-🎉 Спасибо за подписку! 
-
-🔐 **Присоединяйтесь к нашим приватным каналам:**
-Подайте заявку по ссылкам ниже 👇
-        """
-        
-        keyboard = []
-        
-        for channel in referral_channels:
-            channel_id, channel_url, channel_name, _ = channel
-            keyboard.append([InlineKeyboardButton(f"🔐 {channel_name}", url=channel_url)])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
+    if not referral_channels:
         if update.callback_query:
-            await update.callback_query.message.reply_text(text, reply_markup=reply_markup)
-        else:
-            await update.message.reply_text(text, reply_markup=reply_markup)
-        
-        # Помечаем, что рефералка показана
-        db.set_referral_shown(user.id)
-    else:
-        # Если уже показывали рефералку, просто подтверждаем подписку
-        if update.callback_query:
-            await update.callback_query.message.reply_text("✅ Вы подписаны на все каналы!")
+            await update.callback_query.edit_message_text("✅ Вы подписаны на все каналы!")
         else:
             await update.message.reply_text("✅ Вы подписаны на все каналы!")
+        return
+    
+    # Получаем первую реферальную ссылку (можно изменить логику если нужно несколько)
+    channel = referral_channels[0]
+    channel_id, channel_url, channel_name, _ = channel
+    
+    text = f"""
+🎉 Спасибо за подписку! 
+
+🔐 **Присоединяйтесь к нашему приватному каналу:**
+{channel_url}
+
+📌 *Нажмите на ссылку выше чтобы подать заявку*
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton(f"🔐 Перейти в {channel_name}", url=channel_url)],
+        [InlineKeyboardButton("🔍 Проверить подписку", callback_data="check_subs")]
+    ]
+    
+    if update.effective_user.id == ADMIN_ID:
+        keyboard.append([InlineKeyboardButton("👑 Админ-панель", callback_data="admin_panel")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    else:
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def show_subscription_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channels = db.get_subscription_channels()
@@ -361,7 +330,6 @@ async def show_subscription_request(update: Update, context: ContextTypes.DEFAUL
     if not channels:
         # Если нет каналов для подписки, сразу показываем рефералки
         await show_referral_message(update, context)
-        await show_main_menu(update, context)
         return
     
     keyboard = []
@@ -387,33 +355,6 @@ async def show_subscription_request(update: Update, context: ContextTypes.DEFAUL
     else:
         await update.message.reply_text(text, reply_markup=reply_markup)
 
-async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    
-    text = f"""
-🎉 Добро пожаловать, {user.first_name}!
-
-Доступные команды:
-/start - Главное меню
-/check - Проверить подписку
-
-Выберите действие:
-    """
-    
-    keyboard = [
-        [InlineKeyboardButton("🔍 Проверить подписку", callback_data="check_subs")]
-    ]
-    
-    if user.id == ADMIN_ID:
-        keyboard.append([InlineKeyboardButton("👑 Админ-панель", callback_data="admin_panel")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(text, reply_markup=reply_markup)
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -430,7 +371,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if await check_subscriptions(update, context):
             await show_referral_message(update, context)
-            await show_main_menu(update, context)
         else:
             await show_subscription_request(update, context)
     
@@ -507,7 +447,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_admin_panel(update, context)
 
     elif query.data == "back_to_main":
-        await show_main_menu(update, context)
+        await show_referral_message(update, context)
 
 async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db is None:
@@ -661,8 +601,6 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда для принудительной проверки подписки"""
     if await check_subscriptions(update, context):
         await show_referral_message(update, context)
-        await update.message.reply_text("✅ Вы подписаны на все необходимые каналы!")
-        await show_main_menu(update, context)
     else:
         await update.message.reply_text("❌ Вы не подписаны на все необходимые каналы!")
         await show_subscription_request(update, context)
