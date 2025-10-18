@@ -4,7 +4,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# === НАСТРОЙКИ ===
+# === НАСТРОЙКИ ==
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))
 DB_PATH = "/tmp/bot.db" if os.path.exists("/tmp") else "bot.db"
